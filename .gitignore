@@ -9,3 +9,4 @@ data/interim/
 data/clean/*
 !data/clean/DATA_DICTIONARY.md
 data/processed/
+data/model/
