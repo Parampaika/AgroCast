@@ -58,8 +58,7 @@ def build_report(out: Path, G: dict, smoke: bool = False, name: str = "sweep", c
     ok["desc"] = [_desc(r) for r in ok.itertuples()]
     crops = [c for c in G["crops"] if c in set(ok.eval_crop)]
     L = []
-    L.append(f"# {title}
-")
+    L.append(f"# {title}\n")
     L.append(f"*Сгенерировано `src/model/sweep.py` {pd.Timestamp.now():%d.%m.%Y %H:%M}. "
              f"Результаты — `{out.resolve().relative_to(D.ROOT).as_posix()}/sweep_results.csv` "
              f"({len(res)} строк, конфигураций {ok.cfg_id.nunique()}, ошибок {n_err}), "
