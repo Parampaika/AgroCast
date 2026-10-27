@@ -9,8 +9,9 @@
 | `crops.py` | `crops` | `crops` |
 | `yield_panel.py` | `yield` | `yield_panel`, `yield_operational`; `harmonize_regions()` — общая склейка кодов территорий |
 | `weather.py` | `weather` | `weather_region_month`, `weather_region_season` (+ кэш суточной погоды) |
-| `soil.py` | `soil` | `soil_region` |
+| `soil.py` | `soil` | `soil_region` (почвы, WRB, рельеф `elev_*`) |
 | `ndvi.py` | `ndvi` | `ndvi_region`, `ndvi_region_year` (+ кэш точек) |
+| `modis_extra.py` | `modis` | `modis_extra_region`, `modis_extra_region_year` (LAI/FPAR, LST, GPP; + кэш в `_cache/modis/`) |
 | `calendar.py` | `calendar` | `crop_calendar` |
 | `prices.py` | `prices` | `prices`, `prices_crop_map` |
 | `economics.py` | `economics` | `economics_aux` |

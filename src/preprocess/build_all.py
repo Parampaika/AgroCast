@@ -29,8 +29,8 @@ from preprocess.common import Config, ensure_dirs, log, write_stats  # noqa: E40
 
 STEPS = {  # шаг → модуль src/preprocess/<модуль>.py с функцией build(cfg)
     "regions": "regions", "crops": "crops", "yield": "yield_panel", "weather": "weather", "soil": "soil",
-    "ndvi": "ndvi", "calendar": "calendar", "prices": "prices", "economics": "economics",
-    "model_table": "model_table",
+    "ndvi": "ndvi", "modis": "modis_extra", "calendar": "calendar", "prices": "prices",
+    "economics": "economics", "model_table": "model_table",
 }
 
 

@@ -29,7 +29,8 @@ KEYS = {
     "crop_calendar": ["okato", "crop_code"], "prices": ["okato", "product_id", "year"],
     "prices_crop_map": ["product_id", "crop_code"],
     "economics_aux": ["indicator_id", "okato", "item_code", "farm_category_code", "year"],
-    "model_table": ["okato", "crop_code", "year"], "weather_crop_window": ["okato", "crop_code", "year"],
+    "model_table": ["okato", "crop_code", "year"],
+    "modis_extra_region": ["okato", "var", "date"], "modis_extra_region_year": ["okato", "year"], "weather_crop_window": ["okato", "crop_code", "year"],
 }
 
 
@@ -276,3 +277,65 @@ def test_economics():
     assert (e.loc[e.indicator_id == 42380, "coverage"] == "rf_only").all()
     f = e[(e.indicator_id == 30964) & (e.region_level == "subject")].value.dropna()
     assert (f >= 0).all() and f.median() < 500  # кг д. в. на 1 га
+
+
+# ---------- MODIS LAI/FPAR, LST, GPP и рельеф ----------
+
+MODIS_RANGES = {"lai": (0, 10), "fpar": (0, 1), "lst_day": (-60, 75), "lst_night": (-60, 75), "lst_diff": (-40, 50),
+                "gpp": (0, 300)}
+
+
+def test_modis_region(regions):
+    r = load("modis_extra_region")
+    assert set(r["var"]) == set(MODIS_RANGES)
+    for v, (lo, hi) in MODIS_RANGES.items():
+        x = r[r["var"] == v].value.dropna()
+        assert x.between(lo, hi).all(), v
+    assert r.valid_weight_share.between(0, 1).all()
+    assert set(r.okato) == set(regions.okato)
+    jul = r[r.date.dt.month == 7].groupby("var").value.median()
+    assert 0.3 < jul["fpar"] < 0.8 and 15 < jul["lst_day"] < 40 and jul["lst_diff"] > 0 and 20 < jul["gpp"] < 120
+
+
+def test_modis_year_columns():
+    y = load("modis_extra_region_year")
+    for v in ("lai", "fpar", "lst_day", "lst_night", "lst_diff", "gpp"):
+        for c in ("max", "mean", "integral", "peak_doy", "04", "07", "10"):
+            assert f"{v}_{c}" in y.columns, f"{v}_{c}"
+    for v in ("lai", "fpar", "lst_day", "lst_night", "lst_diff"):
+        assert f"{v}_a07" in y.columns and f"{v}_amean" in y.columns
+    assert y.modis_n_points.between(1, 2).all()
+    assert y.lai_peak_doy.dropna().between(91, 305).all()
+
+
+@pytest.mark.parametrize("col", ["lai_mean", "fpar_07", "lst_day_07", "lst_night_mean", "lst_diff_06"])
+def test_modis_norm_uses_train_years_only(col):
+    y = load("modis_extra_region_year")
+    v, f = col.rsplit("_", 1)
+    a = f"{v}_a{f}"
+    implied = (y[col] - y[a]).groupby(y.okato).agg(["min", "max"]).dropna()
+    assert ((implied["max"] - implied["min"]).abs() < 1e-3).all(), "норма должна быть константой региона"
+    tr = y[y.year <= TRAIN_END].groupby("okato")
+    assert np.allclose(implied["min"], tr[col].mean().reindex(implied.index), atol=1e-3)
+    assert tr[a].mean().abs().max() < 1e-3
+
+
+def test_gpp_no_norm_without_train_years():
+    y = load("modis_extra_region_year")
+    assert y.loc[y.year <= TRAIN_END, "gpp_mean"].notna().groupby(y.okato).sum().max() < 5
+    assert "gpp_amean" not in y.columns or y.gpp_amean.isna().all()
+
+
+def test_elevation(regions):
+    s = load("soil_region")
+    assert s.elev_mean.between(-30, 2500).all() and s.elev_mean.notna().all()
+    assert (s.elev_min <= s.elev_mean + 1e-3).all() and (s.elev_mean <= s.elev_max + 1e-3).all()
+    ast = s.set_index("okato").elev_mean
+    assert ast["12000000000"] < 0 and ast["90000000000"] > 300  # Прикаспий ниже уровня моря, Осетия — предгорья
+
+
+def test_model_table_new_blocks(mt):
+    for pref in ("lai_", "fpar_", "lst_day_", "lst_night_", "lst_diff_", "gpp_", "elev_"):
+        assert any(c.startswith(pref) for c in mt.columns), pref
+    assert {"lai_07", "lai_a07", "lst_day_06", "elev_mean", "modis_n_points"} <= set(mt.columns)
+    assert mt[mt.year >= 2001].lai_07.notna().mean() > 0.8

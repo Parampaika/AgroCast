@@ -8,7 +8,10 @@
 - погода: сезонные агрегаты, климат и аномалии к норме `a_*` из weather_region_season (норма — годы ≤ train_end_year);
 - погода в окне культуры `win_*` (от месяца посева до месяца созревания по GGCMI) и их аномалии `a_win_*`;
   отдельно, на все годы и все пары «регион × культура» с календарём, — data/clean/weather_crop_window.parquet;
-- почвы `soil_*`, NDVI за год `ndvi_*` (данные текущего сезона — доступны только по ходу сезона), календарь `cal_*`.
+- почвы `soil_*`, рельеф `elev_*`, NDVI за год `ndvi_*`, календарь `cal_*`;
+- MODIS за год `lai_*`, `fpar_*`, `lst_day_*`, `lst_night_*`, `lst_diff_*`, `gpp_*` (месячные `<var>_<мм>`, аномалии
+  `<var>_a<мм>`), `modis_n_points`. NDVI и MODIS — данные текущего сезона: для прогноза на дату месяцы после неё
+  надо маскировать, сезонные max/mean/integral/peak — известны только после октября.
 """
 from __future__ import annotations
 
@@ -140,7 +143,11 @@ def build(cfg: Config) -> None:
 
     s = load("soil_region")
     sc = [c for c in s.columns if c not in ("okato", "n_points")]
-    m = m.merge(s[["okato"] + sc].rename(columns={c: f"soil_{c}" for c in sc}), on="okato", how="left")
+    m = m.merge(s[["okato"] + sc].rename(columns={c: f"soil_{c}" for c in sc if not c.startswith("elev_")}),
+                on="okato", how="left")
+    if (CLEAN / "modis_extra_region_year.parquet").exists():
+        x = load("modis_extra_region_year")
+        m = m.merge(x, on=["okato", "year"], how="left")
     if (CLEAN / "ndvi_region_year.parquet").exists():
         n = load("ndvi_region_year")
         nc = [c for c in n.columns if c.startswith("ndvi_") and c != "ndvi_peak_date"]

@@ -5,6 +5,8 @@ SoilGrids 2.0 (ISRIC, 250 м) в точках пашни, статистика m
 Единицы переведены из «mapped units» SoilGrids в привычные (см. UNITS).
 Тип почвы — наиболее вероятный класс WRB (wrb_points.csv), доминирующий по сумме весов точек.
 Слоёв влагоёмкости (wv0010/0033/1500) на сервере ISRIC нет — не включены.
+Рельеф (`elev_*`, м над уровнем моря) — высота ячеек ERA5-Land/ERA5 (static_cells.csv, HSURF) в точках пашни;
+`era5_soil_type` — доминирующий тип почвы ERA5 (код 1–7: от грубой к органической).
 """
 from __future__ import annotations
 
@@ -50,6 +52,25 @@ def build(cfg: Config) -> None:
     reg["wrb_dominant_share"] = reg.okato.map((dom.w / tot).round(3))
     second = ws.groupby("okato").nth(1).set_index("okato")
     reg["wrb_second"] = reg.okato.map(second.name)
+    # рельеф: высота ячейки ERA5-Land (0,1°; для ячеек над морем — ERA5 0,25°) в точках пашни; тип почвы ERA5
+    era = RAW / "era5_om"
+    el = []
+    for model in ("copernicus_era5_land", "copernicus_era5"):
+        cells = pd.read_csv(era / model / "cells.csv").set_index("point_id").cell
+        st = pd.read_csv(era / model / "static_cells.csv").set_index("cell")
+        st["HSURF"] = st.HSURF.where(st.HSURF > -100)        # −999 — заполнитель (море); Прикаспий ≈ −28 м — норма
+        st["soil_type"] = st.soil_type.where(st.soil_type > 0)  # 0 — вода
+        el.append(pd.DataFrame({"h": cells.map(st.HSURF), "st": cells.map(st.soil_type)}))
+    el = el[0].combine_first(el[1]).join(pts[["okato", "w"]], how="inner")
+    g = el.groupby("okato")
+    reg["elev_mean"] = reg.okato.map(g.apply(lambda x: (x.h * x.w).sum() / x.w[x.h.notna()].sum(),
+                                             include_groups=False))
+    reg["elev_min"], reg["elev_max"] = reg.okato.map(g.h.min()), reg.okato.map(g.h.max())
+    reg["elev_std"] = reg.okato.map(g.h.std()).fillna(0)
+    reg["era5_soil_type"] = reg.okato.map(el.dropna(subset=["st"]).groupby(["okato", "st"]).w.sum().reset_index()
+                                          .sort_values("w").drop_duplicates("okato", keep="last")
+                                          .set_index("okato").st).astype("Int64")
+    vals += ["elev_mean", "elev_min", "elev_max", "elev_std"]
     for c in vals:
         reg[c] = reg[c].astype("float32")
     save(reg, "soil_region", cfg)
