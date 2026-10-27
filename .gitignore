@@ -10,3 +10,4 @@ data/clean/*
 !data/clean/DATA_DICTIONARY.md
 data/processed/
 data/model/
+data/optimize/
