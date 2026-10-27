@@ -126,12 +126,16 @@ def backtest(years, deltas, lam: float, alpha: float, window: int = 20, control:
             for d in deltas:
                 s = solve(pr, lam, alpha, d)
                 plans[f"d{'all' if d is None else int(round(d * 100))}"] = (s.x, s)
-            # контрольные планы при δ = control: без учёта риска (λ = 0) и по точечному прогнозу (один сценарий — среднее)
-            s = solve(pr, 0.0, alpha, control)
-            plans[f"d{int(round(control * 100))}_mean_only"] = (s.x, evaluate(pr, s.x, alpha, lam))
-            pt = Problem(r.crops, pr.R.mean(1, keepdims=True), r.x0, hi=pr.hi, groups=pr.groups)
-            s = solve(pt, 0.0, alpha, control)
-            plans[f"d{int(round(control * 100))}_point"] = (s.x, evaluate(pr, s.x, alpha, lam))
+            # контрольные планы при δ = control: без учёта риска (λ = 0; совпадает с планом по точечному
+            # прогнозу-среднему, так как цель линейна), только риск (λ = 1) и «по прошлому году» (один сценарий t−1)
+            k = int(round(control * 100))
+            for name, l in ((f"d{k}_mean_only", 0.0), (f"d{k}_cvar_only", 1.0)):
+                s = solve(pr, l, alpha, control)
+                plans[name] = (s.x, evaluate(pr, s.x, alpha, lam))
+            if r.scen_years[-1] == t - 1:
+                pt = Problem(r.crops, pr.R[:, -1:], r.x0, hi=pr.hi, groups=pr.groups)
+                s = solve(pt, 0.0, alpha, control)
+                plans[f"d{k}_last_year"] = (s.x, evaluate(pr, s.x, alpha, lam))
             used = np.zeros(len(r.crops), bool)
             for x, _ in plans.values():
                 used |= x > 0.005
