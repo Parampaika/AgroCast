@@ -2,7 +2,10 @@
 from __future__ import annotations
 
 import json
+import sys
 from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 import matplotlib
 
@@ -43,19 +46,22 @@ def recommend(q: pd.DataFrame, tol: float = 0.01) -> pd.Series:
     return c.sort_values(["rank", "mae"]).iloc[0]
 
 
-def build_report(out: Path, G: dict, smoke: bool = False):
+def build_report(out: Path, G: dict, smoke: bool = False, name: str = "sweep", compare: Path | None = None,
+                 title: str = "Перебор моделей прогноза урожайности"):
     res = pd.read_csv(out / "sweep_results.csv", dtype={"cfg_id": str, "params": str})
     ok = res[res.status == "ok"].copy()
     n_err = int((res.status == "error").sum())
-    fig_dir = D.ROOT / "reports" / "figures" / ("sweep_smoke" if smoke else "sweep")
+    name = "sweep_smoke" if smoke else name
+    fig_dir = D.ROOT / "reports" / "figures" / name
     fig_dir.mkdir(parents=True, exist_ok=True)
-    md_path = D.ROOT / "reports" / ("sweep_smoke.md" if smoke else "sweep.md")
+    md_path = D.ROOT / "reports" / f"{name}.md"
     ok["desc"] = [_desc(r) for r in ok.itertuples()]
     crops = [c for c in G["crops"] if c in set(ok.eval_crop)]
     L = []
-    L.append("# Перебор моделей прогноза урожайности\n")
+    L.append(f"# {title}
+")
     L.append(f"*Сгенерировано `src/model/sweep.py` {pd.Timestamp.now():%d.%m.%Y %H:%M}. "
-             f"Результаты — `{out.relative_to(D.ROOT).as_posix()}/sweep_results.csv` "
+             f"Результаты — `{out.resolve().relative_to(D.ROOT).as_posix()}/sweep_results.csv` "
              f"({len(res)} строк, конфигураций {ok.cfg_id.nunique()}, ошибок {n_err}), "
              "лог — `sweep.log`. Анализ перед перебором — [pre_sweep_analysis.md](pre_sweep_analysis.md).*\n")
     L.append("**Проверка:** скользящий прогноз 2012–2025 (обучение, тренд и нормы погоды — только по годам < t), "
@@ -166,6 +172,7 @@ def build_report(out: Path, G: dict, smoke: bool = False):
         g = g.reindex([c for c in crops if c in g.index])
         g.index = [D.CROP_NAME[c] for c in g.index]
         g.columns = [DATE_LABEL[c] for c in g.columns]
+        g.index.name = "культура"
         L.append("## 6. Дата прогноза → выигрыш к лучшему бейзлайну, % (лучшая конфигурация на дату)\n")
         L.append(g.round(1).reset_index().to_markdown(index=False) + "\n")
         fig, axs = plt.subplots(1, 2, figsize=(13, 4.5))
@@ -246,6 +253,8 @@ def build_report(out: Path, G: dict, smoke: bool = False):
     plt.close(fig)
     L.append("![scatter](figures/{}/pred_vs_actual.png)\n".format(fig_dir.name))
 
+    if compare is not None:
+        L.extend(compare_section(ok, compare, crops))
     errs = res[res.status == "error"]
     if len(errs):
         L.append("## Ошибки\n")
@@ -257,9 +266,52 @@ def build_report(out: Path, G: dict, smoke: bool = False):
     return md_path
 
 
+def best_by(df: pd.DataFrame) -> pd.DataFrame:
+    """Лучшая MAE и выигрыш по (культура, дата) среди всех одиночных моделей и ансамблей."""
+    q = df[df.model != "trend"]
+    i = q.groupby(["eval_crop", "date"]).mae.idxmin()
+    return q.loc[i].set_index(["eval_crop", "date"])
+
+
+def _cmp_table(a: pd.DataFrame, b: pd.DataFrame, col: str, crops: list[str]) -> str:
+    rows = []
+    for c in crops:
+        r = {"культура": D.CROP_NAME[c]}
+        for d in DATE_ORDER:
+            if (c, d) in a.index and (c, d) in b.index:
+                x, y = a.loc[(c, d), col], b.loc[(c, d), col]
+                r[DATE_LABEL[d]] = f"{x:.1f} → {y:.1f} ({y - x:+.1f})"
+        rows.append(r)
+    return pd.DataFrame(rows).to_markdown(index=False)
+
+
+def compare_section(ok: pd.DataFrame, v1_dir: Path, crops: list[str]) -> list[str]:
+    old = pd.read_csv(v1_dir / "sweep_results.csv", dtype={"cfg_id": str, "params": str})
+    old = old[old.status == "ok"]
+    a, b = best_by(old), best_by(ok)
+    L = ["## 9. Сравнение с первой версией (v1, без спутника и рельефа)\n",
+         "Выигрыш к лучшему бейзлайну, %: v1 → новая версия (разница в п. п.). "
+         "Бейзлайны те же, поэтому разница честная.\n",
+         _cmp_table(a, b, "gain_pct", crops) + "\n",
+         "На отложенных годах 2019–2025:\n\n" + _cmp_table(a, b, "late_gain_pct", crops) + "\n"]
+    # что дал спутник: лучшая одиночная конфигурация с блоками F6/F7 против лучшей без них
+    sat = ok[ok.feats.isin(["F6", "F7"]) & (ok.model != "trend")]
+    nos = ok[~ok.feats.isin(["F6", "F7"]) & (ok.model != "trend") & ~ok.model.str.startswith("ens_")]
+    sat, nos = sat[~sat.model.str.startswith("ens_")], nos
+    ga = sat.groupby(["eval_crop", "date"])[["gain_pct"]].max()
+    gb = nos.groupby(["eval_crop", "date"])[["gain_pct"]].max()
+    L.append("Лучшая одиночная конфигурация без спутника → со спутником (F6/F7), та же версия:\n\n"
+             + _cmp_table(gb, ga, "gain_pct", crops) + "\n")
+    return L
+
+
 if __name__ == "__main__":
     import sys
     from model.runner import MODEL_DIR
     from model.sweep import FULL
-    build_report(Path(sys.argv[1]) if len(sys.argv) > 1 else MODEL_DIR, FULL)
+    out_ = Path(sys.argv[1]).resolve() if len(sys.argv) > 1 else MODEL_DIR
+    nm = sys.argv[2] if len(sys.argv) > 2 else "sweep"
+    cmp_ = Path(sys.argv[3]).resolve() if len(sys.argv) > 3 and sys.argv[3] else None
+    ttl = sys.argv[4] if len(sys.argv) > 4 else "Перебор моделей прогноза урожайности"
+    build_report(out_, FULL, name=nm, compare=cmp_, title=ttl)
     print(json.dumps({"ok": True}))
