@@ -294,12 +294,12 @@ def compare_section(ok: pd.DataFrame, v1_dir: Path, crops: list[str]) -> list[st
          _cmp_table(a, b, "gain_pct", crops) + "\n",
          "На отложенных годах 2019–2025:\n\n" + _cmp_table(a, b, "late_gain_pct", crops) + "\n"]
     # что дал спутник: лучшая одиночная конфигурация с блоками F6/F7 против лучшей без них
-    sat = ok[ok.feats.isin(["F6", "F7"]) & (ok.model != "trend")]
-    nos = ok[~ok.feats.isin(["F6", "F7"]) & (ok.model != "trend") & ~ok.model.str.startswith("ens_")]
+    sat = ok[ok.feats.isin(["F6", "F7", "F8"]) & (ok.model != "trend")]
+    nos = ok[~ok.feats.isin(["F6", "F7", "F8"]) & (ok.model != "trend") & ~ok.model.str.startswith("ens_")]
     sat, nos = sat[~sat.model.str.startswith("ens_")], nos
     ga = sat.groupby(["eval_crop", "date"])[["gain_pct"]].max()
     gb = nos.groupby(["eval_crop", "date"])[["gain_pct"]].max()
-    L.append("Лучшая одиночная конфигурация без спутника → со спутником (F6/F7), та же версия:\n\n"
+    L.append("Лучшая одиночная конфигурация без спутника → со спутником (F6/F7/F8), та же версия:\n\n"
              + _cmp_table(gb, ga, "gain_pct", crops) + "\n")
     return L
 

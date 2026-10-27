@@ -43,22 +43,24 @@ STAGES = ["coarse", "models", "dates", "ensembles", "report"]
 
 FULL = {
     "crops": list(D.CROP_NAME),
-    "trends": ["lin_all", "lin15", "ts15", "lin10", "ts10", "mean5"],  # lag1 — заведомо плохо
-    "targets": ["ratio", "diff", "log"],
-    "feats": ["F1", "F2", "F3", "F4", "F5", "F2r"],
+    # v1: mean5 выиграл у всех культур, кроме яровой пшеницы (lin_all); ts10/ts15/lin10 и цель log
+    # проигрывали везде, ElasticNet и HGB слабее Ridge/LightGBM и в разы медленнее
+    "trends": ["mean5", "lin_all", "lin15"],
+    "targets": ["diff", "ratio"],
+    "feats": ["F1", "F2", "F2r", "F4", "F5", "F6", "F7", "F8"],
     "coarse_models": ["ridge", "lgbm"],
-    "pooled_models": ["lgbm"],          # общая модель помогает только деревьям
-    "pooled_targets": ["ratio", "log"],  # diff смешивает масштабы (свёкла — десятки т/га)
+    "pooled_models": ["lgbm"],
+    "pooled_targets": ["ratio"],
     "sample": "no_mismatch",
-    "top_combos": 3,
-    "models": MODELS,
-    "pooled_tune_models": ["lgbm", "xgb", "hgb"],  # CatBoost на общей выборке слишком медленный
+    "top_combos": 4,
+    "models": ["ridge", "lgbm", "xgb", "cat", "et", "rf"],
+    "pooled_tune_models": ["lgbm", "xgb"],
     "trials": 30,
     "top_dates": 4,
-    "date_tune_models": ["ridge", "lgbm"],
-    "date_trials": 25,
+    "date_tune_models": ["ridge", "lgbm", "et"],
+    "date_trials": 30,
     "dates": ["05-01", "06-01", "07-01", "08-01"],
-    "budget_min": {"coarse": 45, "models": 240, "dates": 90, "ensembles": 30},
+    "budget_min": {"coarse": 35, "models": 190, "dates": 70, "ensembles": 30},
     "n_jobs": 12,
 }
 SMOKE = {
@@ -66,7 +68,7 @@ SMOKE = {
     "crops": ["winter_wheat"],
     "trends": ["lin_all", "mean5"],
     "targets": ["ratio", "diff"],
-    "feats": ["F2", "F5"],
+    "feats": ["F2", "F6"],
     "pooled_models": [],
     "top_combos": 1,
     "models": ["ridge", "lgbm", "cat"],
@@ -325,6 +327,9 @@ def main():
     ap.add_argument("--out", default=None, help="папка результатов (по умолчанию data/model)")
     ap.add_argument("--finish", default=None, help="крайний срок всего прогона, 'YYYY-MM-DD HH:MM'")
     ap.add_argument("--n-jobs", type=int, default=None)
+    ap.add_argument("--report-name", default="sweep", help="имя отчёта в reports/ (и папки графиков)")
+    ap.add_argument("--compare", default=None, help="папка результатов предыдущей версии для раздела сравнения")
+    ap.add_argument("--title", default="Перебор моделей прогноза урожайности")
     a = ap.parse_args()
     G = dict(SMOKE if a.smoke else FULL)
     if a.n_jobs:
@@ -360,7 +365,8 @@ def main():
         log.info("[ensembles] готово за %.1f мин", (time.time() - t) / 60)
     if "report" in stages:
         from model.report import build_report
-        build_report(out, G, smoke=a.smoke)
+        build_report(out, G, smoke=a.smoke, name=a.report_name, title=a.title,
+                     compare=Path(a.compare).resolve() if a.compare else None)
         log.info("[report] отчёт записан")
     log.info("финиш")
 

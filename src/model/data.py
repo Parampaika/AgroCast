@@ -58,6 +58,12 @@ WIN_MEAN = ["tmean", "tmax", "sm28_100", "sm7_28", "vpd"]
 SOIL = ["soil_clay_0_30", "soil_sand_0_30", "soil_soc_0_30", "soil_phh2o_0_30",
         "soil_nitrogen_0_30", "soil_cec_0_30", "soil_bdod_0_30", "soil_ocs_0_30"]
 NDVI_MONTHS = ["04", "05", "06", "07", "08", "09"]
+# спутник MODIS (LAI, FPAR, LST день/ночь, GPP): месячные средние по 8-дневным композитам, апрель–октябрь
+SAT_VARS = ["lai", "fpar", "lst_day", "lst_night", "lst_diff", "gpp"]
+SAT_MONTHS = ["04", "05", "06", "07", "08", "09"]
+SAT_PEAK = ["lai", "fpar", "lst_day"]      # максимум за известные месяцы
+SAT_CUM = ["gpp"]                           # сумма месячных значений за известные месяцы
+SAT_PATH = CLEAN / "modis_extra_region_year.parquet"
 
 TREND_TYPES = ["lin_all", "lin10", "lin15", "ts10", "ts15", "mean5", "lag1"]
 BASELINES = ["lin10", "mean5", "lag1"]  # официальные бейзлайны из EDA (tr_* чистого слоя)
@@ -204,6 +210,34 @@ def load_ndvi() -> pd.DataFrame:
 
 
 @lru_cache(maxsize=1)
+def load_sat() -> pd.DataFrame | None:
+    """Месячные значения спутниковых индексов «регион × год»; None, если слой ещё не собран."""
+    if not SAT_PATH.exists():
+        return None
+    keep = ["okato", "year"] + [f"{v}_{m}" for v in SAT_VARS for m in SAT_MONTHS]
+    import pyarrow.parquet as pq
+    have = set(pq.read_schema(SAT_PATH).names)
+    n = pd.read_parquet(SAT_PATH, columns=[c for c in keep if c in have])
+    n["year"] = n.year.astype(int)
+    return n.set_index(["okato", "year"]).sort_index()
+
+
+@lru_cache(maxsize=1)
+def load_elev() -> pd.DataFrame | None:
+    """Рельеф региона (колонки elev_*), где бы препроцессинг их ни положил."""
+    import pyarrow.parquet as pq
+    for name in ("regions", "soil_region", "elevation_region", "model_table"):
+        f = CLEAN / f"{name}.parquet"
+        if not f.exists():
+            continue
+        cols = [c for c in pq.read_schema(f).names if c.startswith("elev_")]
+        if cols:
+            e = pd.read_parquet(f, columns=["okato"] + cols).drop_duplicates("okato")
+            return e.set_index("okato")
+    return None
+
+
+@lru_cache(maxsize=1)
 def load_soil() -> pd.DataFrame:
     return pd.read_parquet(CLEAN / "soil_region.parquet").set_index("okato")
 
@@ -235,7 +269,7 @@ class FeatureGrid:
     grid: pd.DataFrame
     blocks: dict[str, list[str]] = field(default_factory=dict)
 
-    ANOM_BLOCKS = ("m", "w", "n")
+    ANOM_BLOCKS = ("m", "w", "n", "g")
 
 
 @lru_cache(maxsize=None)
@@ -248,7 +282,7 @@ def feature_grid(crop: str, date: str) -> FeatureGrid:
     idx = pd.MultiIndex.from_product([regs, range(2001, LAST_YEAR + 1)], names=["okato", "year"])
     wr = w.reindex(idx)
     out = {}
-    blocks: dict[str, list[str]] = {"m": [], "w": [], "c": [], "s": [], "n": []}
+    blocks: dict[str, list[str]] = {"m": [], "w": [], "c": [], "s": [], "n": [], "g": [], "e": []}
     # F1: месячные значения (в фолде → аномалии)
     for t in known:
         for v in (VARS_COLD if t in COLD_TAGS else VARS_GROW):
@@ -308,6 +342,33 @@ def feature_grid(crop: str, date: str) -> FeatureGrid:
         for col in ["ndvi_max", "ndvi_integral"]:
             out[f"n:{col}"] = nd[col].to_numpy(np.float32)
             blocks["n"].append(f"n:{col}")
+    # F6: спутник MODIS по закончившимся месяцам (как NDVI: месяц входит, если закончился до даты)
+    sat = load_sat()
+    if sat is not None:
+        sr = sat.reindex(idx)
+        known_m = [t for t in SAT_MONTHS if TAG_IDX[t] <= k and TAG_IDX[t] <= a1]
+        for v in SAT_VARS:
+            cols = [f"{v}_{t}" for t in known_m if f"{v}_{t}" in sr]
+            for c in cols:
+                out[f"g:{c}"] = sr[c].to_numpy(np.float32)
+                blocks["g"].append(f"g:{c}")
+            if cols and v in SAT_PEAK:
+                out[f"g:{v}_pk"] = sr[cols].max(axis=1).to_numpy(np.float32)
+                blocks["g"].append(f"g:{v}_pk")
+            if cols and v in SAT_CUM:
+                out[f"g:{v}_cum"] = sr[cols].sum(axis=1, min_count=1).to_numpy(np.float32)
+                blocks["g"].append(f"g:{v}_cum")
+    # рельеф и класс почвы WRB — константы региона
+    el = load_elev()
+    if el is not None:
+        el = el.reindex(okatos)
+        for c in el.columns:
+            out[f"e:{c}"] = el[c].to_numpy(np.float32)
+            blocks["e"].append(f"e:{c}")
+    wrb = load_soil()["wrb_dominant"]
+    levels = {v: i for i, v in enumerate(sorted(wrb.dropna().unique()))}
+    out["e:wrb"] = wrb.reindex(okatos).map(levels).to_numpy(np.float32)
+    blocks["e"].append("e:wrb")
     grid = pd.DataFrame(out, index=idx)
     return FeatureGrid(crop, date, grid, blocks)
 
