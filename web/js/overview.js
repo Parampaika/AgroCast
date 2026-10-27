@@ -1,7 +1,7 @@
 // Экран «Обзор»: карта России, переключатель культуры, шкала дат прогноза, KPI по РФ.
 import { D, crop, fc, regionName, rfSummary } from './data.js';
 import { cropIcon } from './icons.js';
-import { state, fmt, fmtVol, fmtPct, deltaHtml, chart, opt, css, demoBadge, seqStops, divStops, quantile, alpha } from './util.js';
+import { state, fmt, fmtVol, fmtPct, deltaHtml, chart, opt, css, mockBadge, seqStops, divStops, quantile, alpha } from './util.js';
 
 // Коническая равноугольная проекция Ламберта для России
 const D2R = Math.PI / 180;
@@ -71,7 +71,7 @@ export function renderOverview(el) {
     <div class="stack">
       <div class="kpis" id="kpis"></div>
       <div class="card">
-        <div class="card-head"><div><h3>Как уточняется прогноз по РФ</h3><div class="sub">Светлая полоса — 80 % интервал, тёмная — разброс погоды</div></div>${demoBadge()}</div>
+        <div class="card-head"><div><h3>Как уточняется прогноз по РФ</h3><div class="sub">Светлая полоса — 80 % интервал, тёмная — разброс погоды</div></div>${mockBadge('forecast')}</div>
         <div class="chart sm" id="refine"></div>
       </div>
       <div class="card">
@@ -145,7 +145,7 @@ export function renderOverview(el) {
     const lo = devMode ? -20 : quantile(all, 0.05), hi = devMode ? 20 : quantile(all, 0.95);
     const stops = devMode ? divStops() : seqStops();
     const unit = devMode ? '%' : 'т/га';
-    el.querySelector('#legend').innerHTML = `<span>${devMode ? '−20 %' : fmt(lo, 1)}</span><span class="ramp" style="background:linear-gradient(90deg,${stops.join(',')})"></span><span>${devMode ? '+20 %' : fmt(hi, 1) + ' т/га'}</span>${demoBadge()}`;
+    el.querySelector('#legend').innerHTML = `<span>${devMode ? '−20 %' : fmt(lo, 1)}</span><span class="ramp" style="background:linear-gradient(90deg,${stops.join(',')})"></span><span>${devMode ? '+20 %' : fmt(hi, 1) + ' т/га'}</span>${mockBadge('forecast')}`;
 
     const mapOpt = {
       animationDurationUpdate: 600,
@@ -172,7 +172,7 @@ export function renderOverview(el) {
     const rTotal = s.up + s.down;
     el.querySelector('#kpis').innerHTML = `
       <div class="kpi hero wide">
-        <div class="label"><span>Прогноз сбора по РФ · ${c.short.toLowerCase()}</span>${demoBadge()}</div>
+        <div class="label"><span>Прогноз сбора по РФ · ${c.short.toLowerCase()}</span>${mockBadge('forecast')}</div>
         <div class="value num">${fmtVol(s.vol)}</div>
         <div class="foot">80 % интервал: ${fmtVol(s.lo)} — ${fmtVol(s.hi)} · ${fmt(s.yieldAvg, c.crop_code === '3060100' ? 1 : 2)} т/га в среднем</div>
       </div>

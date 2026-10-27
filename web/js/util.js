@@ -109,3 +109,7 @@ function hex(h) { h = h.replace('#', ''); return [0, 2, 4].map((i) => parseInt(h
 export const seqStops = () => [0, 1, 2, 3, 4, 5, 6].map((i) => css('--seq-' + i));
 export const divStops = () => [0, 1, 2, 3, 4, 5, 6].map((i) => css('--div-' + i));
 export const alpha = (hexc, a) => { const [r, g, b] = hex(hexc); return `rgba(${r},${g},${b},${a})`; };
+
+// Плашка «демо-данные» только если файл помечен meta.mock = true
+import { D } from './data.js';
+export const mockBadge = (file, text, title) => (D[file]?.meta?.mock ? demoBadge(text, title) : '');

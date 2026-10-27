@@ -3,7 +3,7 @@ import { D, crop, regionName, regionsAll } from './data.js';
 import { cropIcon } from './icons.js';
 import { calcState, newCalc, scenarioMatrix, profitByScenario, optimize, stats } from './econ.js';
 import { planEditor } from './calc.js';
-import { state, fmt, fmtMoney, fmtSignedMoney, fmtPct, chart, opt, css, demoBadge, alpha, esc } from './util.js';
+import { state, fmt, fmtMoney, fmtSignedMoney, fmtPct, chart, opt, css, mockBadge, alpha, esc } from './util.js';
 
 export function renderOptimize(el) {
   const cfg = calcState();
@@ -42,9 +42,9 @@ export function renderOptimize(el) {
       <p class="chip-note" style="margin:0">Ограничения севооборота (макс. доля культуры) — допущения прототипа. Цель: (1 − осторожность) × средняя прибыль + осторожность × прибыль в худших 20 % сезонов. Учтена убывающая отдача: каждый следующий процент перемен даёт меньше предыдущего (предшественники, худшие участки, перестройка севооборота).</p>
     </div>
     <div class="stack">
-      <div class="kpis" id="oK" style="grid-template-columns:repeat(auto-fit,minmax(180px,1fr))"></div>
+      <div class="kpis" id="oK" style="grid-template-columns:repeat(auto-fit,minmax(150px,1fr))"></div>
       <div class="card">
-        <div class="card-head"><div><h3>Было → стало</h3><div class="sub">Доля площади по культурам: серая полоса — текущий план, цветная — рекомендация</div></div>${demoBadge('сценарии — демо')}</div>
+        <div class="card-head"><div><h3>Было → стало</h3><div class="sub">Доля площади по культурам: серая полоса — текущий план, цветная — рекомендация</div></div>${mockBadge('scenarios', 'сценарии — демо')}</div>
         <div class="diff" id="oDiff"></div>
       </div>
       <div class="grid g-2">
@@ -94,7 +94,7 @@ export function renderOptimize(el) {
     const moved = M.crops.reduce((s, c) => s + Math.abs(best[c] - plan0[c]), 0) / 2;
 
     // главная фраза
-    const changes = M.crops.map((c) => ({ c, d: best[c] - plan0[c] })).filter((x) => Math.abs(x.d) >= 0.005).sort((a, b) => a.d - b.d);
+    const changes = M.crops.map((c) => ({ c, d: best[c] - plan0[c] })).filter((x) => Math.abs(x.d) >= 0.01).sort((a, b) => a.d - b.d);
     const from = changes.filter((x) => x.d < 0).map((x) => crop(x.c).short.toLowerCase());
     const to = changes.filter((x) => x.d > 0).map((x) => crop(x.c).short.toLowerCase());
     el.querySelector('#oCall').innerHTML = moved < 0.004
@@ -107,7 +107,7 @@ export function renderOptimize(el) {
       <div class="kpi"><div class="label">Плохой год (худшие 20 %)</div><div class="value num" style="color:${s1.bad >= s0.bad ? 'var(--pos)' : 'var(--neg)'}">${badTxt}</div><div class="foot">${fmtMoney(s0.bad)} → ${fmtMoney(s1.bad)}</div></div>
       <div class="kpi"><div class="label">Сколько меняем</div><div class="value num">${fmt(moved * 100, 1)}<small>%</small></div><div class="foot">${fmt(moved * cfg.area, 0)} га из ${fmt(cfg.area, 0)}</div></div>`;
 
-    el.querySelector('#oDiff').innerHTML = M.crops.filter((c) => plan0[c] > 0 || best[c] > 0).sort((a, b) => best[b] - best[a]).map((cc) => {
+    el.querySelector('#oDiff').innerHTML = M.crops.filter((c) => plan0[c] > 0 || best[c] >= 0.01).sort((a, b) => best[b] - best[a]).map((cc) => {
       const c = crop(cc), a = plan0[cc] * 100, b = best[cc] * 100, d = b - a;
       const cls = Math.abs(d) < 0.25 ? 'zero' : d > 0 ? 'up' : 'down';
       return `<div class="diff-row"><div class="lbl"><span class="ico" style="color:${c.color};background:${alpha(c.color, .14)}">${cropIcon(c)}</span><div>${c.short}<div class="vals">${fmt(a, 0)} → ${fmt(b, 1)} %</div></div></div>
@@ -127,7 +127,7 @@ export function renderOptimize(el) {
     const xi = Math.round(cfg.X * 100);
     const brand = css('--brand-2'), gold = css('--gold-2');
     curveC.setOption(opt({
-      grid: { top: 34, left: 4, right: 12, bottom: 22 },
+      grid: { top: 48, left: 4, right: 12, bottom: 22 },
       legend: { data: ['Средняя прибыль', 'Плохой год'], left: 0, right: 'auto' },
       tooltip: { formatter: (ps) => `<b>Перенос до ${ps[0].data[0]} %</b>` + ps.map((p) => `<br>${p.marker}${p.seriesName}: ${fmtSignedMoney(p.data[1] * 1e6)}`).join('') },
       xAxis: { type: 'value', min: 0, max: 30, name: 'X, % площади', nameLocation: 'middle', nameGap: 26, nameTextStyle: { color: css('--text-3'), fontSize: 11 }, axisLabel: { formatter: '{value} %' } },

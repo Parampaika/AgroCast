@@ -1,7 +1,7 @@
 // Экран «О методике»: источники, схема, точность против бейзлайнов, ошибка по дате прогноза, ограничения.
 import { D, crop } from './data.js';
 import { SRC_ICONS } from './icons.js';
-import { chart, opt, css, demoBadge, fmt } from './util.js';
+import { chart, opt, css, mockBadge, fmt } from './util.js';
 
 const SOURCES = [
   ['stats', 'ЕМИСС / Росстат', 'Урожайность, посевные площади и валовой сбор по 89 субъектам, 2000–2025; цены производителей.'],
@@ -31,8 +31,8 @@ export function renderMethod(el) {
     </div>
   </div>
   <div class="grid g-2">
-    <div class="card"><div class="card-head"><div><h3>Точность: MAPE по субъектам, %</h3><div class="sub">Скользящая проверка 2012–2025, меньше — лучше</div></div>${demoBadge('предварительная модель', 'Результаты исследовательской модели (reports/model_weather.md); финальная модель ещё подбирается')}</div><div class="chart lg" id="mAcc"></div></div>
-    <div class="card"><div class="card-head"><div><h3>Выигрыш погоды к тренду по дате прогноза</h3><div class="sub">Снижение MAE относительно линейного тренда, %</div></div>${demoBadge('предварительная модель')}</div><div class="chart lg" id="mLead"></div></div>
+    <div class="card"><div class="card-head"><div><h3>Точность: MAPE по субъектам, %</h3><div class="sub">Скользящая проверка 2012–2025, меньше — лучше</div></div>${mockBadge('metrics', 'предварительная модель', 'Результаты исследовательской модели (reports/model_weather.md); финальная модель ещё подбирается')}</div><div class="chart lg" id="mAcc"></div></div>
+    <div class="card"><div class="card-head"><div><h3>Выигрыш погоды к тренду по дате прогноза</h3><div class="sub">Снижение MAE относительно линейного тренда, %</div></div>${mockBadge('metrics', 'предварительная модель')}</div><div class="chart lg" id="mLead"></div></div>
   </div>
   <div class="card" style="margin-top:18px"><div class="card-head"><h3>Честные ограничения</h3></div>
     <ul class="limits">

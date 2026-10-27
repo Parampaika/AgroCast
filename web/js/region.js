@@ -1,7 +1,7 @@
 // Экран «Карточка региона»: история + тренд + веер прогноза, факторы погоды, погода сезона, почвы.
 import { D, crop, fc, hist, regionName, regionsAll } from './data.js';
 import { cropPicker, bindCropPicker } from './overview.js';
-import { state, fmt, fmtVol, fmtPct, deltaHtml, chart, opt, css, demoBadge, realBadge, alpha, esc } from './util.js';
+import { state, fmt, fmtVol, fmtPct, deltaHtml, chart, opt, css, mockBadge, realBadge, alpha, esc } from './util.js';
 
 export function renderRegion(el) {
   let ok = state.region;
@@ -23,11 +23,11 @@ export function renderRegion(el) {
   <div class="kpis" id="rk" style="grid-template-columns:repeat(auto-fit,minmax(170px,1fr));margin-bottom:18px"></div>
   <div class="grid" style="grid-template-columns:minmax(0,1.6fr) minmax(0,1fr)" id="row1">
     <div class="card">
-      <div class="card-head"><div><h3>Урожайность 2000–2025 и прогноз на 2026</h3><div class="sub">Факт ЕМИСС, линейный тренд и веер прогноза: внешняя полоса — 80 % интервал, внутренняя — разброс погодных сценариев</div></div><div>${realBadge('история — ЕМИСС')} ${demoBadge('прогноз — демо')}</div></div>
+      <div class="card-head"><div><h3>Урожайность 2008–2025 и прогноз на 2026</h3><div class="sub">Факт ЕМИСС, линейный тренд и веер прогноза: внешняя полоса — 80 % интервал, внутренняя — разброс погодных сценариев</div></div><div>${realBadge('история — ЕМИСС')} ${mockBadge('forecast', 'прогноз — демо')}</div></div>
       <div class="chart lg" id="hist"></div>
     </div>
     <div class="card">
-      <div class="card-head"><div><h3>Почему такой прогноз</h3><div class="sub">Вклад погоды сезона в отклонение от тренда, п.п.</div></div>${demoBadge()}</div>
+      <div class="card-head"><div><h3>Почему такой прогноз</h3><div class="sub">Вклад погоды сезона в отклонение от тренда, п.п.</div></div>${mockBadge('drivers')}</div>
       <div class="chart" id="drv" style="height:340px"></div>
       <div class="factor-note" id="drvNote"></div>
     </div>
@@ -95,8 +95,8 @@ export function renderRegion(el) {
         if (k === s26) s += `<br>Прогноз: <b>${fmt(d.p50, dg)}</b> (${fmt(d.p10, dg)}–${fmt(d.p90, dg)})`;
         return s;
       } },
-      xAxis: { type: 'category', data: yrs, boundaryGap: false, axisLabel: { interval: 4 } },
-      yAxis: { type: 'value', name: 'т/га', scale: false, min: 0, axisLabel: { formatter: (v) => fmt(v, cc === '3060100' ? 0 : 1) } },
+      xAxis: { type: 'category', data: yrs, boundaryGap: false, min: yi.indexOf(2008), axisLabel: { interval: 2 } },
+      yAxis: { type: 'value', name: 'т/га', min: (v) => Math.max(0, Math.floor(v.min * 0.8)), axisLabel: { formatter: (v) => fmt(v, cc === '3060100' ? 0 : 1) } },
       series: [
         ...band(outer, 'outer', alpha(gold, 0.22)),
         ...band(inner, 'inner', alpha(gold, 0.45)),
@@ -127,7 +127,7 @@ export function renderRegion(el) {
       : 'Для этой культуры в регионе факторы не рассчитаны.';
 
     // таблица по всем культурам региона
-    el.querySelector('#cropsTbl').innerHTML = `<div class="card-head"><h3>Все культуры региона · ${D.dates[i].label.toLowerCase()}</h3>${demoBadge()}</div>
+    el.querySelector('#cropsTbl').innerHTML = `<div class="card-head"><h3>Все культуры региона · ${D.dates[i].label.toLowerCase()}</h3>${mockBadge('forecast')}</div>
       <div class="table-wrap"><table class="table"><thead><tr><th>Культура</th><th>т/га</th><th>к тренду</th><th>площадь, тыс. га</th><th>сбор</th></tr></thead><tbody>
       ${avail.map((k) => { const ff = fc(ok, k), dd = ff.by_date[i], cr = crop(k); return `<tr data-cc="${k}" style="cursor:pointer">
         <td><div class="crop-cell"><span class="ico" style="color:${cr.color};background:${alpha(cr.color, .14)}">${iconOf(cr)}</span>${cr.short}</div></td>
