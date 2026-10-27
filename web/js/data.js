@@ -1,5 +1,6 @@
 // Загрузка web/data/*.json и удобные выборки. Формат — docs/06_ui_data_contract.md.
 const FILES = ['regions.geojson', 'crops', 'history', 'forecast', 'drivers', 'weather_season', 'scenarios', 'economics', 'soils', 'metrics'];
+const OPTIONAL = ['optimization'];
 
 export const D = {};
 
@@ -10,6 +11,9 @@ export async function loadAll() {
       return r.json();
     })));
   FILES.forEach((f, i) => { D[f.replace('.geojson', '')] = res[i]; });
+  // Необязательные файлы: без них сайт работает на заглушках
+  await Promise.all(OPTIONAL.map((f) => fetch(`data/${f}.json`, { cache: 'no-cache' })
+    .then((r) => (r.ok ? r.json() : null)).catch(() => null).then((j) => { D[f] = j; })));
   D.cropList = D.crops.crops;
   D.cropBy = Object.fromEntries(D.cropList.map((c) => [c.crop_code, c]));
   D.regionBy = Object.fromEntries(D.regions.features.map((f) => [f.properties.okato, f.properties]));

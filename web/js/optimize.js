@@ -1,20 +1,25 @@
 // Экран «Оптимизация структуры посевов»: текущий план → рекомендованный при ограничении переноса X % и уровне осторожности.
 import { D, crop, regionName, regionsAll } from './data.js';
 import { cropIcon } from './icons.js';
-import { calcState, newCalc, scenarioMatrix, profitByScenario, optimize, stats } from './econ.js';
+import { calcState, newCalc, scenarioMatrix, profitByScenario, optimize, stats, optRegion } from './econ.js';
 import { planEditor } from './calc.js';
-import { state, fmt, fmtMoney, fmtSignedMoney, fmtPct, chart, opt, css, mockBadge, alpha, esc } from './util.js';
+import { state, fmt, fmtMoney, fmtSignedMoney, fmtPct, chart, opt, css, mockBadge, realBadge, alpha, esc } from './util.js';
 
 export function renderOptimize(el) {
   const cfg = calcState();
   cfg.X ??= 0.1;
   cfg.lambda ??= 0.5;
+  const O = D.optimization, oR = optRegion(cfg.region);
+  const yrs = oR ? oR.scenario_years : D.scenarios.scenario_years;
+  // Источник сценариев: расчёт модуля оптимизации (реальные данные) или заглушка scenarios.json
+  const scenBadge = oR ? realBadge(O.settings.scenario_source === 'hist' ? 'сценарии — история ЕМИСС' : 'сценарии — модель', O.meta.source)
+    : mockBadge('scenarios', 'сценарии — демо');
   el.innerHTML = `
   <div class="page-head">
     <div>
       <div class="eyebrow">Оптимизация структуры посевов</div>
       <h1>Измените план немного — получите заметный эффект</h1>
-      <p class="lead">Перебираем погоду ${D.scenarios.scenario_years[0]}–${D.scenarios.scenario_years.at(-1)} годов как сценарии сезона и ищем план с лучшей прибылью при ограничении «менять не больше X % площади» и правилах севооборота.</p>
+      <p class="lead">Перебираем погоду ${yrs[0]}–${yrs.at(-1)} годов как сценарии сезона и ищем план с лучшей прибылью при ограничении «менять не больше X % площади» и правилах севооборота.</p>
     </div>
     <div class="field" style="min-width:260px"><label for="oReg">Регион</label><select class="select" id="oReg">${regionsAll().map((r) => `<option value="${r}" ${r === cfg.region ? 'selected' : ''}>${esc(regionName(r))}</option>`).join('')}</select></div>
   </div>
@@ -39,12 +44,12 @@ export function renderOptimize(el) {
         <div class="card-head" style="margin:0 0 8px"><span class="field-label">Текущий план, ${fmt(cfg.area, 0)} га</span><a class="chip-note" href="#/calc">изменить в калькуляторе</a></div>
         <div class="plan-rows" id="oPlan"></div>
       </div>
-      <p class="chip-note" style="margin:0">Ограничения севооборота (макс. доля культуры) — допущения прототипа. Цель: (1 − осторожность) × средняя прибыль + осторожность × прибыль в худших 20 % сезонов. Учтена убывающая отдача: каждый следующий процент перемен даёт меньше предыдущего (предшественники, худшие участки, перестройка севооборота).</p>
+      <p class="chip-note" style="margin:0">Ограничения севооборота — агрономические нормы возврата культуры на поле (подсолнечник ≤ 15 %, свёкла ≤ 20 % и не больше текущей площади), затраты на 1 га — допущения (src/optimize/config.toml). Цель: (1 − осторожность) × средняя прибыль + осторожность × прибыль в худших 20 % сезонов. Учтена убывающая отдача: каждый следующий процент перемен даёт меньше предыдущего (предшественники, худшие участки, перестройка севооборота).</p>
     </div>
     <div class="stack">
       <div class="kpis" id="oK" style="grid-template-columns:repeat(auto-fit,minmax(150px,1fr))"></div>
       <div class="card">
-        <div class="card-head"><div><h3>Было → стало</h3><div class="sub">Доля площади по культурам: серая полоса — текущий план, цветная — рекомендация</div></div>${mockBadge('scenarios', 'сценарии — демо')}</div>
+        <div class="card-head"><div><h3>Было → стало</h3><div class="sub">Доля площади по культурам: серая полоса — текущий план, цветная — рекомендация</div></div>${scenBadge}</div>
         <div class="diff" id="oDiff"></div>
       </div>
       <div class="grid g-2">
@@ -52,7 +57,8 @@ export function renderOptimize(el) {
         <div class="card"><div class="card-head"><div><h3>Прибыль по погодным сценариям</h3><div class="sub">Каждый столбец — погода одного прошлого сезона</div></div></div><div class="chart" id="oDist"></div></div>
       </div>
     </div>
-  </div>`;
+  </div>
+  ${oR ? regionCardHtml(oR) : ''}`;
 
   const curveC = chart(el.querySelector('#oCurve')), distC = chart(el.querySelector('#oDist'));
 
@@ -155,4 +161,68 @@ export function renderOptimize(el) {
     }), true);
   }
   update(true);
+  if (oR) bindRegionCard(el, oR);
+}
+
+// ---------- Расчёт для структуры посевов субъекта в целом (src/optimize, CVaR-LP)
+const DKEYS = () => [...D.optimization.settings.deltas.map(String), 'all'];
+const dLabel = (k) => (k === 'all' ? 'только севооборот' : `δ = ${k} п.п.`);
+
+function regionCardHtml(o) {
+  const s = D.optimization.settings;
+  const bt = o.backtest;
+  return `<div class="card" style="margin-top:18px">
+    <div class="card-head"><div><h3>Структура посевов субъекта: оптимальный план</h3>
+      <div class="sub">Сценарная оптимизация с риск-мерой CVaR (линейное программирование): цель — (1 − λ) × средняя прибыль + λ × прибыль в худших ${fmt(s.alpha * 100, 0)} % сезонов, λ = ${fmt(s.lambda, 1)}. Доля каждой культуры меняется не больше чем на δ; пул — ${fmt(o.pool_kha, 0)} тыс. га (7 культур прототипа, посевы 2025 г.).</div></div>
+      ${realBadge('расчёт модуля', D.optimization.meta.source)}</div>
+    <div class="seg" id="rSeg" style="margin-bottom:14px;flex-wrap:wrap">${DKEYS().map((k, i) => `<button data-k="${k}" class="${i === 0 ? 'active' : ''}">${dLabel(k)}</button>`).join('')}</div>
+    <div class="kpis" id="rK" style="grid-template-columns:repeat(auto-fit,minmax(150px,1fr));margin-bottom:14px"></div>
+    <div class="grid g-2">
+      <div><div class="diff" id="rDiff"></div>
+        <p class="chip-note" style="margin:12px 0 0">${bt ? `Проверка на прошлых годах ${bt.years[0]}–${bt.years[1]} (план по данным до года t, результат — по факту года t), δ = 10 п.п.: в среднем <b>${bt.real_gain_rub_ha > 0 ? '+' : '−'}${fmt(Math.abs(bt.real_gain_rub_ha), 0)} ₽</b> на гектар, план лучше текущего в ${fmt(bt.win_share_pct, 0)} % лет. ` : ''}Затраты — допущения; выигрыш держится на разнице маржи культур и чувствителен к ценам (reports/optimization.md).</p></div>
+      <div><div class="card-head" style="margin:0 0 4px"><div><h3 style="font-size:14px">Доход — риск</h3><div class="sub">Эффективная граница: каждая точка — оптимум при своём λ</div></div></div><div class="chart" id="rFront" style="height:300px"></div></div>
+    </div>
+  </div>`;
+}
+
+function bindRegionCard(el, o) {
+  const frontC = chart(el.querySelector('#rFront'));
+  const show = (k) => {
+    const p = o.plans[k], c0 = o.current;
+    // ₽/га — точно, без округления до тысяч
+    const rh = (v) => fmt(v, 0) + ' ₽', srh = (v) => (v > 0 ? '+' : v < 0 ? '−' : '') + rh(Math.abs(v));
+    el.querySelector('#rK').innerHTML = `
+      <div class="kpi hero"><div class="label">Ожидаемая прибыль, ₽/га</div><div class="value num">${srh(p.mean - c0.mean)}</div><div class="foot">${rh(c0.mean)} → ${rh(p.mean)} · ${fmtSignedMoney(p.gain_mln * 1e6)} в год по субъекту</div></div>
+      <div class="kpi"><div class="label">Худшие ${fmt(D.optimization.settings.alpha * 100, 0)} % сезонов, ₽/га</div><div class="value num" style="color:${p.cvar >= c0.cvar ? 'var(--pos)' : 'var(--neg)'}">${srh(p.cvar - c0.cvar)}</div><div class="foot">${rh(c0.cvar)} → ${rh(p.cvar)}</div></div>
+      <div class="kpi"><div class="label">Самый плохой сезон, ₽/га</div><div class="value num" style="color:${p.worst >= c0.worst ? 'var(--pos)' : 'var(--neg)'}">${srh(p.worst - c0.worst)}</div><div class="foot">${rh(c0.worst)} → ${rh(p.worst)}</div></div>
+      <div class="kpi"><div class="label">Перенос площади</div><div class="value num">${fmt(p.turnover_pct, 1)}<small>%</small></div><div class="foot">${fmt(p.turnover_pct / 100 * o.pool_kha, 0)} тыс. га</div></div>`;
+    el.querySelector('#rDiff').innerHTML = o.crops.map((cc, i) => ({ cc, a: o.x0[i] * 100, b: p.x[i] * 100 }))
+      .filter((r) => r.a >= 0.5 || r.b >= 0.5).sort((x, y) => y.b - x.b).map(({ cc, a, b }) => {
+        const c = crop(cc), d = b - a, cls = Math.abs(d) < 0.25 ? 'zero' : d > 0 ? 'up' : 'down';
+        return `<div class="diff-row"><div class="lbl"><span class="ico" style="color:${c.color};background:${alpha(c.color, .14)}">${cropIcon(c)}</span><div>${c.short}<div class="vals">${fmt(a, 1)} → ${fmt(b, 1)} %</div></div></div>
+          <div class="track"><div class="old" style="width:${a}%"></div><div class="new" style="width:${b}%;background:${c.color}"></div></div>
+          <div class="d ${cls}">${cls === 'zero' ? '0' : (d > 0 ? '▲ +' : '▼ −') + fmt(Math.abs(d), 1)} п.п.</div></div>`;
+      }).join('');
+    const brand = css('--brand-2');
+    const line = (key, name, color, width) => ({ name, type: 'line', data: (o.frontier[key] || []).map((q) => [q[0], q[1], q[2]]),
+      symbolSize: 7, lineStyle: { width, color }, itemStyle: { color } });
+    frontC.setOption(opt({
+      grid: { top: 30, left: 4, right: 14, bottom: 58 },
+      legend: { data: ['только севооборот', 'δ = 10 п.п.', 'текущий план', 'выбранный план'], left: 0, right: 'auto', top: 'auto', bottom: 0 },
+      tooltip: { trigger: 'item', formatter: (q) => `<b>${q.seriesName}</b>${q.data[2] != null ? ` · λ = ${fmt(q.data[2], 1)}` : ''}<br>средняя: ${rh(q.data[1])}/га<br>худшие сезоны: ${rh(q.data[0])}/га` },
+      xAxis: { type: 'value', scale: true, name: 'худшие сезоны, тыс. ₽/га', nameLocation: 'middle', nameGap: 20, nameTextStyle: { color: css('--text-3'), fontSize: 11 }, axisLabel: { formatter: (v) => fmt(v / 1e3, 1) } },
+      yAxis: { type: 'value', scale: true, name: 'средняя, тыс. ₽/га', axisLabel: { formatter: (v) => fmt(v / 1e3, 1) } },
+      series: [
+        line('all', 'только севооборот', css('--text-3'), 2),
+        line('10', 'δ = 10 п.п.', brand, 3),
+        { name: 'текущий план', type: 'scatter', data: [[o.current.cvar, o.current.mean, null]], symbolSize: 12, itemStyle: { color: css('--border-strong'), borderColor: css('--surface'), borderWidth: 2 } },
+        { name: 'выбранный план', type: 'scatter', data: [[p.cvar, p.mean, null]], symbolSize: 13, itemStyle: { color: css('--gold'), borderColor: css('--surface'), borderWidth: 2 } },
+      ],
+    }), true);
+  };
+  el.querySelectorAll('#rSeg button').forEach((b) => b.addEventListener('click', () => {
+    el.querySelectorAll('#rSeg button').forEach((x) => x.classList.toggle('active', x === b));
+    show(b.dataset.k);
+  }));
+  show(DKEYS()[0]);
 }

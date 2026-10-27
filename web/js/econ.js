@@ -63,19 +63,38 @@ export function cropEcon(cfg) {
   return { rows, tot };
 }
 
+// Расчёт модуля оптимизации по субъекту (web/data/optimization.json), если он выгружен
+export const optRegion = (ok) => D.optimization?.regions?.[ok];
+
 // Матрица «культура × сценарий → прибыль на 1 га», руб.
+// Есть optimization.json — урожайность по сценариям, цены и затраты субъекта берём оттуда (как в расчёте LP);
+// культуры плана вне пула субъекта — из scenarios.json по тем же годам.
 export function scenarioMatrix(cfg) {
   const m = multipliers(cfg);
   const sc = D.scenarios.regions[cfg.region] || {};
-  const crops = Object.keys(sc).filter((cc) => D.cropBy[cc] && fc(cfg.region, cc));
+  const o = optRegion(cfg.region);
+  const years = o ? o.scenario_years : D.scenarios.scenario_years;
+  const crops = [...new Set([...(o ? o.crops : []), ...Object.keys(sc)])].filter((cc) => D.cropBy[cc] && fc(cfg.region, cc));
   const R = {}, rev = {};
   for (const cc of crops) {
-    const ys = sc[cc], mu = mean(ys);
-    const pr = price(cfg.region, cc), cost = D.economics.crops[cc].cost_rub_ha * m.c;
+    const i = o ? o.crops.indexOf(cc) : -1;
+    const ys = i >= 0 ? o.yields[i] : years.map((y) => sc[cc]?.[D.scenarios.scenario_years.indexOf(y)]);
+    if (ys.some((y) => y == null)) continue;
+    const mu = mean(ys);
+    const pr = i >= 0 ? o.price_rub_t[i] : price(cfg.region, cc);
+    const cost = (i >= 0 ? o.cost_rub_ha[i] : D.economics.crops[cc].cost_rub_ha) * m.c;
     R[cc] = ys.map((y) => (mu + (y - mu) * m.risk) * m.y * pr - cost);
     rev[cc] = mu * m.y * pr;
   }
-  return { crops, R, rev, years: D.scenarios.scenario_years, plan0: { ...cfg.plan } };
+  return { crops: Object.keys(R), R, rev, years, plan0: { ...cfg.plan } };
+}
+
+// Максимальная доля культуры в хозяйстве: норма севооборота модуля оптимизации (src/optimize/config.toml),
+// иначе — из crops.json; свёклу (no_expand) не расширяем сверх текущего плана.
+export function maxShare(cc, plan0) {
+  const c = D.optimization?.crops?.[cc];
+  if (!c) return D.cropBy[cc].max_share;
+  return c.no_expand ? (plan0[cc] || 0) : Math.max(c.max_share, plan0[cc] || 0);
 }
 
 // Убывающая отдача: каждый следующий гектар перемен даёт меньше — добавленная площадь культуры хуже
@@ -117,7 +136,7 @@ export function optimize(plan0, M, { X, lambda, enabled, step = 0.005 }) {
     for (const i of crops) {
       if (w[i] < step - 1e-9) continue;
       for (const j of crops) {
-        if (i === j || !enabled[j] || w[j] + step > D.cropBy[j].max_share + 1e-9) continue;
+        if (i === j || !enabled[j] || w[j] + step > maxShare(j, plan0) + 1e-9) continue;
         w[i] -= step; w[j] += step;
         if (moved() <= X + 1e-9) {
           const v = obj();
