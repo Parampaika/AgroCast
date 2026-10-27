@@ -147,6 +147,18 @@ def tune_study(cfg_dict: dict, trials: int, timeout: float, preds_dir: str, jour
 
 
 def run_studies(G, runner, tasks, stage, trials, deadline, log):
+    """Исследования Optuna параллельно; при падении пула (нехватка памяти) он пересоздаётся."""
+    from concurrent.futures.process import BrokenProcessPool
+    for attempt in range(8):
+        try:
+            return _run_studies(G, runner, tasks, stage, trials, deadline, log)
+        except BrokenProcessPool:
+            log.error("[%s] пул процессов упал (попытка %d), перезапуск; готовые исследования не повторяются",
+                      stage, attempt + 1)
+            time.sleep(20)
+
+
+def _run_studies(G, runner, tasks, stage, trials, deadline, log):
     """Исследования Optuna параллельно (по одному на процесс); готовые не повторяются."""
     res = runner.load()
     done = set(res[(res.stage == stage) & (res.status == "ok")].error.dropna().astype(str).str.extract(r"base=(\w+)")[0])
