@@ -59,10 +59,10 @@ SOIL = ["soil_clay_0_30", "soil_sand_0_30", "soil_soc_0_30", "soil_phh2o_0_30",
         "soil_nitrogen_0_30", "soil_cec_0_30", "soil_bdod_0_30", "soil_ocs_0_30"]
 NDVI_MONTHS = ["04", "05", "06", "07", "08", "09"]
 # спутник MODIS (LAI, FPAR, LST день/ночь, GPP): месячные средние по 8-дневным композитам, апрель–октябрь
-SAT_VARS = ["lai", "fpar", "lst_day", "lst_night", "lst_diff", "gpp"]
+SAT_VARS = ["lai", "fpar", "lst_day", "lst_night", "lst_diff"]  # GPP есть только с 2021 г. — в проверку 2012–2025 не годится
 SAT_MONTHS = ["04", "05", "06", "07", "08", "09"]
 SAT_PEAK = ["lai", "fpar", "lst_day"]      # максимум за известные месяцы
-SAT_CUM = ["gpp"]                           # сумма месячных значений за известные месяцы
+SAT_CUM: list[str] = []                    # накопленные суммы (GPP исключён)
 SAT_PATH = CLEAN / "modis_extra_region_year.parquet"
 
 TREND_TYPES = ["lin_all", "lin10", "lin15", "ts10", "ts15", "mean5", "lag1"]
