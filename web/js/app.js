@@ -1,19 +1,20 @@
 // Точка входа: загрузка данных, роутер по хешу, тема.
 import { loadAll } from './data.js';
 import { disposeCharts, state } from './util.js';
+import { renderHome } from './home.js';
 import { renderOverview } from './overview.js';
 import { renderRegion } from './region.js';
 import { renderCalc } from './calc.js';
 import { renderOptimize } from './optimize.js';
 import { renderMethod } from './method.js';
 
-const ROUTES = { overview: renderOverview, region: renderRegion, calc: renderCalc, optimize: renderOptimize, method: renderMethod };
+const ROUTES = { home: renderHome, overview: renderOverview, region: renderRegion, calc: renderCalc, optimize: renderOptimize, method: renderMethod };
 const main = document.getElementById('main');
 
 function route() {
   const [path, query = ''] = location.hash.split('?');
-  const [, name = 'calc', arg] = path.split('/');
-  const r = ROUTES[name] ? name : 'calc';
+  const [, name = 'home', arg] = path.split('/');
+  const r = ROUTES[name] ? name : 'home';
   if (r === 'region' && arg) state.region = arg;
   document.querySelectorAll('#nav a').forEach((a) => a.classList.toggle('active', a.dataset.route === (r === 'region' ? 'overview' : r)));
   disposeCharts();
@@ -28,6 +29,18 @@ function route() {
   route.first = false;
 }
 route.first = true;
+// Поповер «i» не выходит за края экрана: после открытия сдвигаем его внутрь окна
+document.addEventListener('toggle', (e) => {
+  const d = e.target;
+  if (!(d instanceof HTMLDetailsElement) || !d.classList.contains('info') || !d.open) return;
+  const pop = d.querySelector('.pop');
+  pop.style.transform = '';
+  const r = pop.getBoundingClientRect(), W = document.documentElement.clientWidth;
+  let dx = 0;
+  if (r.right > W - 12) dx = W - 12 - r.right;
+  if (r.left + dx < 12) dx = 12 - r.left;
+  if (dx) pop.style.transform = `translateX(${Math.round(dx)}px)`;
+}, true);
 // Поповеры «i» закрываются по клику вне их
 document.addEventListener('click', (e) => document.querySelectorAll('details.info[open]').forEach((d) => { if (!d.contains(e.target)) d.open = false; }));
 
