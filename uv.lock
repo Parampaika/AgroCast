@@ -1990,6 +1990,21 @@ wheels = [
 ]
 
 [[package]]
+name = "python-pptx"
+version = "1.0.2"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "lxml" },
+    { name = "pillow" },
+    { name = "typing-extensions" },
+    { name = "xlsxwriter" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/52/a9/0c0db8d37b2b8a645666f7fd8accea4c6224e013c42b1d5c17c93590cd06/python_pptx-1.0.2.tar.gz", hash = "sha256:479a8af0eaf0f0d76b6f00b0887732874ad2e3188230315290cd1f9dd9cc7095", size = 10109297, upload-time = "2024-08-07T17:33:37.772Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/d9/4f/00be2196329ebbff56ce564aa94efb0fbc828d00de250b1980de1a34ab49/python_pptx-1.0.2-py3-none-any.whl", hash = "sha256:160838e0b8565a8b1f67947675886e9fea18aa5e795db7ae531606d68e785cba", size = 472788, upload-time = "2024-08-07T17:33:28.192Z" },
+]
+
+[[package]]
 name = "pywin32"
 version = "312"
 source = { registry = "https://pypi.org/simple" }
@@ -2147,6 +2162,7 @@ dependencies = [
     { name = "optuna" },
     { name = "pandas" },
     { name = "pyarrow" },
+    { name = "python-pptx" },
     { name = "rarfile" },
     { name = "rasterio" },
     { name = "requests" },
@@ -2180,6 +2196,7 @@ requires-dist = [
     { name = "optuna", specifier = ">=5.0.0" },
     { name = "pandas", specifier = ">=3.1.0" },
     { name = "pyarrow", specifier = ">=26.0.0" },
+    { name = "python-pptx", specifier = ">=1.0.2" },
     { name = "rarfile", specifier = ">=4.5" },
     { name = "rasterio", specifier = ">=1.5.2" },
     { name = "requests", specifier = ">=2.34.2" },
@@ -2628,6 +2645,15 @@ wheels = [
     { url = "https://files.pythonhosted.org/packages/99/c7/bd05c5c430feb347aa040fcc8870135d70b256718deee9bc7d2ca74a77ff/xgboost-3.4.1-py3-none-manylinux_2_28_x86_64.whl", hash = "sha256:6adf2afa396da2ae8ed30295b50b99d4712eed9a6e0ce6cfe069290e4335e51f", size = 57615456, upload-time = "2026-08-15T08:39:09.983Z" },
     { url = "https://files.pythonhosted.org/packages/2f/3c/925394671f6a1668e2a71886de66e80be694eaf37f615cec74eefaf43107/xgboost-3.4.1-py3-none-win_amd64.whl", hash = "sha256:2d30fa513673101f542fdcbd18f30c8f96c064046f798635ac08663e9969f81b", size = 48942686, upload-time = "2026-08-15T08:39:16.182Z" },
     { url = "https://files.pythonhosted.org/packages/90/2f/f2fbe984ca095709fd246546125e78834740f347e3aa7561a22a1e928510/xgboost-3.4.1-py3-none-win_arm64.whl", hash = "sha256:e9312b30e5679d27c1d8b9ee97e092b964d960a672d5d406d9fb3cd0845c9797", size = 2094178, upload-time = "2026-08-15T08:39:19.308Z" },
+]
+
+[[package]]
+name = "xlsxwriter"
+version = "3.3.0"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/93/f2/98b45e52bc0330256bd4bb039cc44b28f838ad85602ce4f358f355d501bb/xlsxwriter-3.3.0.tar.gz", hash = "sha256:0a6bf2e4dcec8b29dd9b86d1e622132134c48bb6fd10f925fdfb229f0447199a", size = 221380, upload-time = "2026-10-22T00:26:03.317Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/ce/9d/3d30eaaa7e06bdb6172f938b2661d64f8d899bdca54120384ecf3759488a/xlsxwriter-3.3.0-py3-none-any.whl", hash = "sha256:5f04772d43281da5109af66f39b65153359a203e896847c416476e709b024469", size = 179548, upload-time = "2026-10-22T00:26:02.009Z" },
 ]
 
 [[package]]
