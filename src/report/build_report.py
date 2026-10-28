@@ -146,6 +146,27 @@ def compute_numbers() -> tuple[dict, dict]:
                 N[f"opt_cvar_ha_d{dv}"] = fnum(np.average(q.cvar1 - q.cvar0, weights=w))
                 N[f"opt_worst_better_d{dv}"] = str(int((q.worst1 > q.worst0 + 1e-6).sum()))
                 N["opt_mean0"] = fnum(m0)
+        es = S._read_csv(S.TABLES / "optimization_effect_stats.csv")
+        if es is not None:
+            r5 = es[es.delta_pp == 5].iloc[0]
+            N["opt_med_gain_d5"], N["opt_q3_gain_d5"] = fnum(r5.gain_rub_ha_median), fnum(r5.gain_rub_ha_q75)
+            N["opt_med_pct_d5"], N["opt_share_win_d5"] = fnum(r5.gain_pct_median), fnum(r5.share_gain_pct)
+        if d is not None and "gain_rub_per_moved_ha" in d:
+            N["opt_per_moved_d5"] = fnum(round(at(0.05).gain_rub_per_moved_ha, -2))
+            N["opt_gain_d5_bln"] = fnum(at(0.05).gain_mln / 1e3)
+        cs = S._read_csv(S.TABLES / "optimization_constraints.csv")
+        if cs is not None:
+            N["opt_norot_d10_bln"] = fnum(cs[(cs.delta_pp == 10) & (cs.variant == "no_rotation")].gain_mln.iloc[0] / 1e3)
+        sc = S._read_csv(S.TABLES / "optimization_scenario_compare.csv")
+        if sc is not None:
+            N["opt_hist_d5_bln"] = fnum(sc[(sc.delta_pp == 5) & (sc.scenarios == "история")].gain_mln.iloc[0] / 1e3)
+        if rec is not None and "n_scen" in rec:
+            N["opt_n_scen"] = str(int(rec.n_scen.median()))
+        sens = S._read_csv(S.TABLES / "optimization_sensitivity.csv")
+        if sens is not None:
+            corn = sens[(sens.factor == "price") & (sens.crop_code.astype(str).str.startswith("1080202"))]
+            N["opt_sens_corn_lo"], N["opt_sens_corn_hi"] = fnum(corn.gain_mln.min() / 1e3), fnum(corn.gain_mln.max() / 1e3)
+            N["opt_sens_min"] = fnum(sens[sens.factor.isin(["price", "cost"])].gain_mln.min() / 1e3)
         b = S._read_csv(S.TABLES / "optimization_backtest_summary.csv")
         if b is not None:
             b = b.set_index("plan")
