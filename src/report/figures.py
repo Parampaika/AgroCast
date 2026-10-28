@@ -512,7 +512,7 @@ def forecast_2026(out: Path) -> bool:
     ax.invert_yaxis()
     ax.set_xlim(rel("p10").min() - 4, rel("p90").max() + 30)
     ax.grid(axis="y", visible=False)
-    ax.set_xlabel("прогноз 2026 к тренду, % (итоговые модели, конец сезона, среднее по субъектам с весом площади)")
+    ax.set_xlabel("оценка 2026 к тренду, % (по фактической погоде сезона, среднее по субъектам с весом площади)")
     ax.legend(loc="upper center", bbox_to_anchor=(0.5, 1.18), ncol=2, fontsize=7)
     return _save(fig, out)
 

@@ -828,6 +828,8 @@ class Doc:
         line(author, 12, "0b0b0b", bold=True, after=2)
         line(m["affiliation"], 10, "52514e", font=self.BODY_FONT, after=2)
         line(f"{m['city_year']} · версия от {self.N['date_build']}", 10, "52514e", font=self.BODY_FONT)
+        if m.get("subtitle_links"):
+            line(m["subtitle_links"], 9.5, self.BLUE, font=self.BODY_FONT)
         self.page_break()
 
     def toc(self):
