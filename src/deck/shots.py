@@ -21,7 +21,7 @@ SHOTS = [
     ("overview", "#/overview", (1440, 900)),
     ("region", "#/region/03000000000", (1440, 1500)),
     ("optimize", "#/optimize", (1440, 1280)),
-    ("calc", "#/calc", (1440, 1100)),
+    ("calc", "#/calc", (1440, 1750)),
 ]
 
 
