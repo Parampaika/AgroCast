@@ -1,7 +1,7 @@
 // Экран «Карточка региона»: история + тренд + веер прогноза, факторы погоды, погода сезона, почвы.
 import { D, crop, fc, hist, regionName, regionsAll } from './data.js';
-import { cropPicker, bindCropPicker } from './overview.js';
-import { state, fmt, fmtVol, fmtPct, deltaHtml, chart, opt, css, mockBadge, realBadge, alpha, esc } from './util.js';
+import { cropPicker, bindCropPicker, dateSeg } from './overview.js';
+import { state, fmt, fmtVol, fmtPct, deltaHtml, chart, opt, css, info, alpha, esc, dateNote, dateWhat, isFinalDate } from './util.js';
 
 export function renderRegion(el) {
   let ok = state.region;
@@ -10,37 +10,44 @@ export function renderRegion(el) {
   if (!avail.includes(state.crop)) state.crop = avail[0];
 
   el.innerHTML = `
-  <div class="page-head">
+  <div class="page-head" style="margin-bottom:14px">
     <div>
-      <div class="eyebrow">Карточка региона · ${esc(D.regionBy[ok]?.fo || '')}</div>
+      <div class="eyebrow">Регион · ${esc(D.regionBy[ok]?.fo || '')}</div>
       <div class="region-hero">
         <select class="select" id="regSel" aria-label="Регион">${regionsAll().map((r) => `<option value="${r}" ${r === ok ? 'selected' : ''}>${esc(regionName(r))}</option>`).join('')}</select>
       </div>
+      <span class="frame">Прогноз — для региона в целом (среднее по хозяйствам), а не для отдельного поля.</span>
     </div>
-    <div class="seg" id="dateSeg">${D.dates.map((d, i) => `<button data-i="${i}" class="${i === state.dateIdx ? 'active' : ''}">${d.label}</button>`).join('')}</div>
+    <div>${dateSeg('dateSeg', state.dateIdx)}</div>
   </div>
-  <div class="toolbar" style="margin-bottom:16px" id="cropBar"></div>
+  <div class="toolbar" style="margin-bottom:14px" id="cropBar"></div>
+  <p class="date-note" id="dNote" style="margin:0 0 14px"></p>
+  <h2 class="verdict" id="rVerdict" style="font-size:18px;margin-bottom:12px"></h2>
   <div class="kpis" id="rk" style="grid-template-columns:repeat(auto-fit,minmax(170px,1fr));margin-bottom:18px"></div>
-  <div class="grid" style="grid-template-columns:minmax(0,1.6fr) minmax(0,1fr)" id="row1">
+  <div class="card">
+    <div class="card-head"><div><h3 id="histT"></h3><div class="sub">Линия — факт по годам, пунктир — обычный уровень (тренд), золотой веер — диапазон прогноза</div></div>
+      ${info('История — ЕМИСС (все категории хозяйств); 2025 г. — оценка по сбору и посевной площади (итогов Росстата ещё нет).', 'Внешняя полоса веера — 80 % интервал с учётом погоды и ошибки модели; внутренняя — только разброс погоды.')}</div>
+    <div class="chart lg" id="hist"></div>
+  </div>
+  <div class="tabs" id="tabs" role="tablist">
+    <button data-t="why" class="active">Почему такой прогноз</button><button data-t="weather">Погода сезона</button><button data-t="soil">Почвы</button><button data-t="all">Все культуры региона</button>
+  </div>
+  <div class="tab-pane" data-p="why">
     <div class="card">
-      <div class="card-head"><div><h3>Урожайность 2008–2025 и прогноз на 2026</h3><div class="sub">Факт ЕМИСС, линейный тренд и веер прогноза: внешняя полоса — 80 % интервал, внутренняя — разброс погодных сценариев</div></div><div>${realBadge('история — ЕМИСС')} ${mockBadge('forecast', 'прогноз — демо')}</div></div>
-      <div class="chart lg" id="hist"></div>
-    </div>
-    <div class="card">
-      <div class="card-head"><div><h3>Почему такой прогноз</h3><div class="sub">Вклад погоды сезона в отклонение от тренда, п.п.</div></div>${mockBadge('drivers')}</div>
+      <div class="card-head"><div><h3 id="drvT">Что повлияло на прогноз</h3><div class="sub">Вклад погоды сезона в отклонение от обычного уровня, п.п.</div></div>${info('Вклады считаются по аномалиям погоды сезона относительно нормы 2001–2021 и оценивают влияние факторов в модели.', 'Это связь по данным, а не доказанная причина.')}</div>
       <div class="chart" id="drv" style="height:340px"></div>
       <div class="factor-note" id="drvNote"></div>
     </div>
   </div>
-  <div class="grid g-3" style="margin-top:18px">
-    <div class="card"><div class="card-head"><h3>Температура, °C</h3>${realBadge('ERA5')}</div><div class="chart sm" id="wT"></div></div>
-    <div class="card"><div class="card-head"><h3>Осадки, мм</h3>${realBadge('ERA5')}</div><div class="chart sm" id="wP"></div></div>
-    <div class="card"><div class="card-head"><h3>ГТК Селянинова</h3>${realBadge('ERA5')}</div><div class="chart sm" id="wH"></div></div>
+  <div class="tab-pane" data-p="weather" hidden>
+    <div class="grid g-3">
+      <div class="card"><div class="card-head"><h3>Температура, °C</h3></div><div class="chart sm" id="wT"></div></div>
+      <div class="card"><div class="card-head"><h3>Осадки, мм</h3></div><div class="chart sm" id="wP"></div></div>
+      <div class="card"><div class="card-head"><h3>Влагообеспеченность (ГТК)</h3>${info('ГТК Селянинова: осадки за период, делённые на сумму температур. Ниже 0,7 — засуха, 1,0–1,5 — влаги достаточно.', 'Погода — ERA5, нормы — средние за 2001–2021.')}</div><div class="chart sm" id="wH"></div></div>
+    </div>
   </div>
-  <div class="grid g-2" style="margin-top:18px">
-    <div class="card" id="soil"></div>
-    <div class="card" id="cropsTbl"></div>
-  </div>`;
+  <div class="tab-pane" data-p="soil" hidden><div class="card" id="soil"></div></div>
+  <div class="tab-pane" data-p="all" hidden><div class="card" id="cropsTbl"></div></div>`;
 
   el.querySelector('#regSel').addEventListener('change', (e) => { location.hash = '#/region/' + e.target.value; });
   el.querySelectorAll('#dateSeg button').forEach((b) => b.addEventListener('click', () => {
@@ -55,7 +62,13 @@ export function renderRegion(el) {
   drawCrops();
 
   const hc = chart(el.querySelector('#hist')), dc = chart(el.querySelector('#drv'));
-  drawWeather(el, ok);
+  let weatherDone = false;
+  el.querySelectorAll('#tabs button').forEach((b) => b.addEventListener('click', () => {
+    el.querySelectorAll('#tabs button').forEach((x) => x.classList.toggle('active', x === b));
+    el.querySelectorAll('.tab-pane').forEach((pn) => { pn.hidden = pn.dataset.p !== b.dataset.t; });
+    if (b.dataset.t === 'weather' && !weatherDone) { weatherDone = true; drawWeather(el, ok); }
+    if (b.dataset.t === 'why') dc.resize();
+  }));
   drawSoil(el, ok);
 
   function draw() {
@@ -64,12 +77,16 @@ export function renderRegion(el) {
     const last = [...yi].reverse().find((y) => h.yield[yi.indexOf(y)] != null || h.yield_est[yi.indexOf(y)] != null);
     const lastY = h.yield[yi.indexOf(last)] ?? h.yield_est[yi.indexOf(last)];
     const dg = cc === '3060100' ? 1 : 2;
+    const fcName = isFinalDate(i) ? 'Оценка по итогам сезона' : 'Прогноз';
+    el.querySelector('#dNote').textContent = dateNote(i);
+    const dv = d.dev_trend_pct;
+    el.querySelector('#rVerdict').textContent = `${c.name}, ${regionName(ok)}: ${fmt(d.p50, dg)} т/га — ${Math.abs(dv) < 1 ? 'около обычного уровня' : fmt(Math.abs(dv), 0) + ' % ' + (dv > 0 ? 'выше' : 'ниже') + ' обычного'} (${dateWhat(i)})`;
+    el.querySelector('#histT').textContent = `Урожайность 2008–2025 и ${isFinalDate(i) ? 'оценка' : 'прогноз'} на 2026`;
     el.querySelector('#rk').innerHTML = `
-      <div class="kpi hero"><div class="label">Прогноз ${D.dates[i].label.toLowerCase()}</div><div class="value num">${fmt(d.p50, dg)}<small>т/га</small></div><div class="foot">80 %: ${fmt(d.p10, dg)}–${fmt(d.p90, dg)} т/га</div></div>
-      <div class="kpi"><div class="label">К тренду</div><div class="value">${deltaHtml(d.dev_trend_pct)}</div><div class="foot">тренд ${fmt(f.trend, dg)} т/га</div></div>
-      <div class="kpi"><div class="label">К ${last} году</div><div class="value">${deltaHtml((d.p50 / lastY - 1) * 100)}</div><div class="foot">${fmt(lastY, dg)} т/га${last === 2025 ? ' (оценка по сбору)' : ''}</div></div>
-      <div class="kpi"><div class="label">Площадь 2025</div><div class="value num">${fmt(f.area_kha, 1)}<small>тыс. га</small></div><div class="foot">${c.name}</div></div>
-      <div class="kpi"><div class="label">Сбор, прогноз</div><div class="value num">${fmtVol(d.volume_kt)}</div><div class="foot">${fmtVol(d.p10 * f.area_kha)} — ${fmtVol(d.p90 * f.area_kha)}</div></div>`;
+      <div class="kpi hero"><div class="label">${isFinalDate(i) ? 'Оценка' : 'Прогноз'}, т/га</div><div class="value num">${fmt(d.p50, dg)}</div><div class="foot">80 % интервал: ${fmt(d.p10, dg)}–${fmt(d.p90, dg)}</div></div>
+      <div class="kpi"><div class="label">К обычному уровню</div><div class="value">${deltaHtml(d.dev_trend_pct)}</div><div class="foot">обычно ${fmt(f.trend, dg)} т/га (тренд)</div></div>
+      <div class="kpi"><div class="label">К ${last} году</div><div class="value">${deltaHtml((d.p50 / lastY - 1) * 100)}</div><div class="foot">тогда ${fmt(lastY, dg)} т/га${last === 2025 ? ' (оценка по сбору)' : ''}</div></div>
+      <div class="kpi"><div class="label">Сбор по региону</div><div class="value num">${fmtVol(d.volume_kt)}</div><div class="foot">на ${fmt(f.area_kha, 1)} тыс. га (посевы 2025)</div></div>`;
 
     // история + веер
     const yrs = yi.map(String);
@@ -85,14 +102,14 @@ export function renderRegion(el) {
       { name, type: 'line', data: arr.map((x) => (x[0] == null ? null : x[1] - x[0])), stack: name, symbol: 'none', lineStyle: { opacity: 0 }, areaStyle: { color }, silent: true, tooltip: { show: false } },
     ];
     hc.setOption(opt({
-      legend: { data: ['Факт', 'Оценка 2025', 'Тренд', 'Прогноз p50'] },
+      legend: { data: ['Факт', 'Оценка 2025', 'Обычный уровень', fcName] },
       tooltip: { formatter: (ps) => {
         const k = ps[0].dataIndex, y = yi[k];
         let s = `<b>${y}</b>`;
         if (actual[k] != null) s += `<br>Факт: ${fmt(actual[k], dg)} т/га`;
         if (est[k] != null) s += `<br>Оценка по сбору: ${fmt(est[k], dg)} т/га`;
-        if (h.trend[k] != null) s += `<br>Тренд: ${fmt(h.trend[k], dg)} т/га`;
-        if (k === s26) s += `<br>Прогноз: <b>${fmt(d.p50, dg)}</b> (${fmt(d.p10, dg)}–${fmt(d.p90, dg)})`;
+        if (h.trend[k] != null) s += `<br>Обычный уровень: ${fmt(h.trend[k], dg)} т/га`;
+        if (k === s26) s += `<br>${fcName}: <b>${fmt(d.p50, dg)}</b> (${fmt(d.p10, dg)}–${fmt(d.p90, dg)})`;
         return s;
       } },
       xAxis: { type: 'category', data: yrs, boundaryGap: false, min: yi.indexOf(2008), axisLabel: { interval: 2 } },
@@ -102,8 +119,8 @@ export function renderRegion(el) {
         ...band(inner, 'inner', alpha(gold, 0.45)),
         { name: 'Факт', type: 'line', data: actual, symbol: 'circle', symbolSize: 6, lineStyle: { width: 2.5, color: brand }, itemStyle: { color: brand }, connectNulls: false },
         { name: 'Оценка 2025', type: 'line', data: est, symbol: 'emptyCircle', symbolSize: 8, lineStyle: { opacity: 0 }, itemStyle: { color: brand } },
-        { name: 'Тренд', type: 'line', data: h.trend.map((v, k) => (k >= 5 ? v : null)), symbol: 'none', lineStyle: { width: 1.5, type: 'dashed', color: css('--text-3') }, itemStyle: { color: css('--text-3') } },
-        { name: 'Прогноз p50', type: 'line', data: yi.map((y, k) => (k === s25 ? anchor : k === s26 ? d.p50 : null)), symbol: 'circle', symbolSize: (v, p) => (p.dataIndex === s26 ? 13 : 0), lineStyle: { width: 2.5, type: [6, 4], color: css('--gold-2') }, itemStyle: { color: css('--gold'), borderColor: css('--surface'), borderWidth: 3 },
+        { name: 'Обычный уровень', type: 'line', data: h.trend.map((v, k) => (k >= 5 ? v : null)), symbol: 'none', lineStyle: { width: 1.5, type: 'dashed', color: css('--text-3') }, itemStyle: { color: css('--text-3') } },
+        { name: fcName, type: 'line', data: yi.map((y, k) => (k === s25 ? anchor : k === s26 ? d.p50 : null)), symbol: 'circle', symbolSize: (v, p) => (p.dataIndex === s26 ? 13 : 0), lineStyle: { width: 2.5, type: [6, 4], color: css('--gold-2') }, itemStyle: { color: css('--gold'), borderColor: css('--surface'), borderWidth: 3 },
           label: { show: true, position: 'right', formatter: (p) => (p.dataIndex === s26 ? fmt(d.p50, dg) : ''), fontWeight: 800, color: css('--text') } },
       ],
     }), true);
@@ -117,18 +134,19 @@ export function renderRegion(el) {
       legend: false,
       tooltip: { trigger: 'item', formatter: (p) => { const x = items[p.dataIndex]; return `<b>${x.label}</b><br>Аномалия: ${fmtSignedU(x.anomaly, x.unit)}<br>Вклад: ${fmtPct(x.contrib_pct)} к урожайности`; } },
       xAxis: { type: 'value', splitNumber: 3, axisLabel: { formatter: (v) => fmtPct(v, 0), hideOverlap: true }, splitLine: { show: true, lineStyle: { color: css('--border'), type: [3, 4] } } },
-      yAxis: { type: 'category', data: items.map((x) => x.label), axisLabel: { color: css('--text'), fontSize: 12.5, fontWeight: 600, width: 150, overflow: 'truncate' }, splitLine: { show: false } },
+      yAxis: { type: 'category', data: items.map((x) => x.label), axisLabel: { color: css('--text'), fontSize: 12.5, fontWeight: 600, width: 210, overflow: 'break' }, splitLine: { show: false } },
       series: [{ type: 'bar', barWidth: 16, data: items.map((x) => ({ value: x.contrib_pct, itemStyle: { color: x.contrib_pct >= 0 ? pos : neg, borderRadius: x.contrib_pct >= 0 ? [0, 6, 6, 0] : [6, 0, 0, 6] } })),
         label: { show: true, position: 'right', formatter: (p) => fmtPct(p.value, 1), color: css('--text-2'), fontSize: 11.5 } }],
     }), true);
     const sum = drv.reduce((s, x) => s + x.contrib_pct, 0);
+    el.querySelector('#drvT').textContent = drv.length ? (sum >= 0 ? 'Погода сезона в основном помогла урожаю' : 'Погода сезона в основном помешала урожаю') : 'Что повлияло на прогноз';
     el.querySelector('#drvNote').innerHTML = drv.length
-      ? `Сумма вкладов: <b>${fmtPct(sum)}</b>. Зелёный — погода помогла урожаю, коричневый — помешала. В итоговой модели здесь будут SHAP-вклады.`
+      ? `Сумма вкладов: <b>${fmtPct(sum)}</b>. Зелёный — погода помогла урожаю, коричневый — помешала.`
       : 'Для этой культуры в регионе факторы не рассчитаны.';
 
     // таблица по всем культурам региона
-    el.querySelector('#cropsTbl').innerHTML = `<div class="card-head"><h3>Все культуры региона · ${D.dates[i].label.toLowerCase()}</h3>${mockBadge('forecast')}</div>
-      <div class="table-wrap"><table class="table"><thead><tr><th>Культура</th><th>т/га</th><th>к тренду</th><th>площадь, тыс. га</th><th>сбор</th></tr></thead><tbody>
+    el.querySelector('#cropsTbl').innerHTML = `<div class="card-head"><h3>Все культуры региона · ${dateWhat(i)}</h3></div>
+      <div class="table-wrap"><table class="table"><thead><tr><th>Культура</th><th>т/га</th><th>к обычному</th><th>площадь, тыс. га</th><th>сбор</th></tr></thead><tbody>
       ${avail.map((k) => { const ff = fc(ok, k), dd = ff.by_date[i], cr = crop(k); return `<tr data-cc="${k}" style="cursor:pointer">
         <td><div class="crop-cell"><span class="ico" style="color:${cr.color};background:${alpha(cr.color, .14)}">${iconOf(cr)}</span>${cr.short}</div></td>
         <td class="num"><b>${fmt(dd.p50, k === '3060100' ? 1 : 2)}</b></td><td>${deltaHtml(dd.dev_trend_pct, 0)}</td><td class="num">${fmt(ff.area_kha, 1)}</td><td class="num">${fmtVol(dd.volume_kt)}</td></tr>`; }).join('')}
@@ -177,7 +195,7 @@ function drawSoil(el, ok) {
   const cl = css('--div-1'), si = css('--gold'), sa = css('--div-2');
   const ph = s.ph;
   const phTxt = ph < 5.5 ? 'кислые' : ph < 6.5 ? 'слабокислые' : ph < 7.5 ? 'нейтральные' : 'щелочные';
-  box.innerHTML = `<div class="card-head"><h3>Почвы пашни</h3>${realBadge('SoilGrids')}</div>
+  box.innerHTML = `<div class="card-head"><h3>Почвы пашни региона</h3>${info('Почвы — SoilGrids 2.0 (ISRIC), слой 0–30 см, среднее по точкам пашни региона.', 'Это региональные средние, а не данные вашего поля.')}</div>
     <div style="font-size:20px;font-weight:800;letter-spacing:-.01em">${esc(WRB[s.wrb] || s.wrb || '—')}</div>
     <div class="chip-note">доминирующий класс WRB на ${fmt((s.wrb_share || 0) * 100, 0)} % точек пашни</div>
     <div style="margin-top:14px" class="field-label">Гранулометрия, 0–30 см</div>

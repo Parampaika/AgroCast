@@ -25,6 +25,8 @@ function route() {
   route.first = false;
 }
 route.first = true;
+// Поповеры «i» закрываются по клику вне их
+document.addEventListener('click', (e) => document.querySelectorAll('details.info[open]').forEach((d) => { if (!d.contains(e.target)) d.open = false; }));
 
 document.getElementById('themeToggle').addEventListener('click', () => {
   const root = document.documentElement;

@@ -1,56 +1,50 @@
-// Экран «Калькулятор фермера»: участок, структура посевов, поправки → т/га, объём, выручка, затраты, маржа.
+// Экран «Калькулятор хозяйства»: план посевов в гектарах + поправки → урожайность, сбор, выручка, затраты, маржа.
 import { D, crop, regionName, regionsAll } from './data.js';
 import { cropIcon } from './icons.js';
-import { calcState, newCalc, cropEcon, ADJ, multipliers } from './econ.js';
-import { state, fmt, fmtMoney, chart, opt, css, demoBadge, realBadge, alpha, esc } from './util.js';
+import { calcState, newCalc, presetPlan, clearPlan, syncPlan, cropEcon, ADJ, multipliers } from './econ.js';
+import { state, fmt, fmtMoney, chart, opt, css, info, alpha, esc, dateNote, isFinalDate } from './util.js';
 
-export function planEditor(cfg, onChange) {
+const STEP = 50;
+
+// Редактор плана в гектарах: у каждой культуры независимое поле; доли — только подпись
+export function haEditor(cfg, onChange) {
   const crops = Object.keys(D.forecast.regions[cfg.region]);
-  const html = crops.map((cc) => {
-    const c = crop(cc), v = Math.round((cfg.plan[cc] || 0) * 100);
-    return `<div class="plan-row ${v ? '' : 'off'}" data-cc="${cc}">
+  const rowsHtml = crops.map((cc) => {
+    const c = crop(cc), v = Math.round(cfg.ha[cc] || 0);
+    return `<div class="ha-row ${v ? '' : 'off'}" data-cc="${cc}">
       <span class="ico" style="color:${c.color};background:${alpha(c.color, .14)}">${cropIcon(c)}</span>
-      <div><div class="name">${c.short}<small>макс. ${Math.round(c.max_share * 100)} %</small></div>
-      <input type="range" min="0" max="100" step="1" value="${v}" style="--p:${v}%" aria-label="Доля ${c.short}"></div>
-      <span class="pct num">${v} %</span></div>`;
+      <div class="nm">${c.short}<small class="sh"></small></div>
+      <div class="stepper"><button type="button" data-d="-1" aria-label="Меньше">−</button><input type="number" inputmode="numeric" min="0" max="1000000" step="${STEP}" value="${v}" aria-label="${c.short}, га"><button type="button" data-d="1" aria-label="Больше">+</button></div>
+    </div>`;
   }).join('');
-  const bind = (root) => {
-    root.querySelectorAll('.plan-row input').forEach((inp) => inp.addEventListener('input', () => {
-      const cc = inp.closest('.plan-row').dataset.cc;
-      setShare(cfg, cc, +inp.value / 100);
-      sync(root, cfg);
-      onChange();
-    }));
+  const html = `<div class="ha-rows" id="haRows">${rowsHtml}</div>
+    <div class="ha-total"><span>Всего в плане</span><b class="num" id="haTotal"></b></div>`;
+  const paint = (root) => {
+    root.querySelectorAll('.ha-row').forEach((row) => {
+      const cc = row.dataset.cc, v = Math.round(cfg.ha[cc] || 0);
+      const inp = row.querySelector('input');
+      if (document.activeElement !== inp) inp.value = v;
+      row.classList.toggle('off', !v);
+      row.querySelector('.sh').textContent = cfg.area > 0 && v ? `${fmt((v / cfg.area) * 100, 0)} % плана` : 'не сеем';
+    });
+    const t = root.querySelector('#haTotal');
+    if (t) t.textContent = fmt(cfg.area, 0) + ' га';
   };
-  return { html, bind };
+  const bind = (root) => {
+    const set = (cc, v) => { cfg.ha[cc] = Math.max(0, Math.min(1e6, Math.round(+v || 0))); syncPlan(cfg); paint(root); onChange(); };
+    root.querySelectorAll('.ha-row').forEach((row) => {
+      const cc = row.dataset.cc, inp = row.querySelector('input');
+      inp.addEventListener('input', () => set(cc, inp.value));
+      row.querySelectorAll('button').forEach((b) => b.addEventListener('click', () => set(cc, (cfg.ha[cc] || 0) + (+b.dataset.d) * STEP)));
+    });
+    paint(root);
+  };
+  return { html, bind, paint };
 }
-function sync(root, cfg) {
-  root.querySelectorAll('.plan-row').forEach((row) => {
-    const v = Math.round((cfg.plan[row.dataset.cc] || 0) * 100);
-    const inp = row.querySelector('input');
-    if (document.activeElement !== inp) inp.value = v;
-    inp.style.setProperty('--p', inp.value + '%');
-    row.querySelector('.pct').textContent = v + ' %';
-    row.classList.toggle('off', !v);
-  });
-}
-// Меняем долю одной культуры, остальные пропорционально, сумма = 100 %
-export function setShare(cfg, cc, v) {
-  const others = Object.keys(cfg.plan).filter((k) => k !== cc);
-  const rest = others.reduce((s, k) => s + (cfg.plan[k] || 0), 0);
-  if (rest <= 1e-9) {
-    v = Math.min(v, 1);
-    const free = Object.keys(D.forecast.regions[cfg.region]).filter((k) => k !== cc);
-    cfg.plan[cc] = v;
-    if (v < 1 && free.length) cfg.plan[free[0]] = 1 - v;
-    return;
-  }
-  cfg.plan[cc] = v;
-  for (const k of others) cfg.plan[k] = (cfg.plan[k] || 0) * (1 - v) / rest;
-}
+export const planEditor = haEditor;
 
-const selectHtml = (id, list, val, label, hint) => `<div class="field"><label for="${id}">${label}</label>
-  <select class="select" id="${id}">${list.map((x) => `<option value="${x.id}" ${x.id === val ? 'selected' : ''}>${esc(x.label)}</option>`).join('')}</select>${hint ? `<span class="hint">${hint}</span>` : ''}</div>`;
+const selectHtml = (id, list, val, label) => `<div class="field"><label for="${id}">${label}</label>
+  <select class="select" id="${id}">${list.map((x) => `<option value="${x.id}" ${x.id === val ? 'selected' : ''}>${esc(x.label)}</option>`).join('')}</select></div>`;
 
 export function renderCalc(el) {
   const cfg = calcState();
@@ -58,111 +52,117 @@ export function renderCalc(el) {
   el.innerHTML = `
   <div class="page-head">
     <div>
-      <div class="eyebrow">Калькулятор фермера</div>
+      <div class="eyebrow">Калькулятор хозяйства</div>
       <h1>Сколько соберёте и сколько заработаете</h1>
-      <p class="lead">Введите участок и план посевов — получите прогноз урожайности в т/га, общий объём по каждой культуре, выручку, затраты и маржу с диапазоном «плохой — обычный — хороший год».</p>
+      <p class="lead">Задайте, сколько гектаров под какой культурой, — получите урожайность, сбор, выручку и маржу.</p>
+      <span class="frame"><b>Как считаем:</b> берём прогноз по вашему региону в целом — так, как будто ваши поля урожайны, как в среднем по региону. Отличия ваших полей учтите поправками ниже.</span>
     </div>
-    <a class="btn" href="#/optimize"><svg viewBox="0 0 24 24"><path d="M5 15l4-4 3 3 7-7"/><path d="M15 7h4v4"/></svg>Оптимизировать план</a>
+    <a class="btn" href="#/optimize"><svg viewBox="0 0 24 24"><path d="M5 15l4-4 3 3 7-7"/><path d="M15 7h4v4"/></svg>Что посеять</a>
   </div>
   <div class="grid g-calc">
     <div class="card stack" style="gap:16px">
-      <div class="card-head" style="margin:0"><h3>Участок</h3></div>
+      <div class="card-head" style="margin:0"><h3>Ваше хозяйство</h3></div>
       <div class="field"><label for="cReg">Регион</label><select class="select" id="cReg">${regionsAll().map((r) => `<option value="${r}" ${r === cfg.region ? 'selected' : ''}>${esc(regionName(r))}</option>`).join('')}</select></div>
-      <div class="grid" style="grid-template-columns:1fr 1fr;gap:12px">
-        <div class="field"><label for="cArea">Площадь пашни, га</label><input class="input num" id="cArea" type="number" min="1" max="1000000" step="10" value="${cfg.area}"></div>
-        <div class="field"><label for="cDate">Дата прогноза</label><select class="select" id="cDate">${D.dates.map((d, i) => `<option value="${i}" ${i === cfg.dateIdx ? 'selected' : ''}>${d.label}</option>`).join('')}</select></div>
-      </div>
+      <div class="field"><label for="cDate">На какую дату считать</label><select class="select" id="cDate">${D.dates.map((d, i) => `<option value="${i}" ${i === cfg.dateIdx ? 'selected' : ''}>${isFinalDate(i) ? 'Итог сезона (по фактической погоде)' : 'Прогноз на ' + d.label}</option>`).join('')}</select><span class="hint" id="cDateNote"></span></div>
       <div>
-        <div class="card-head" style="margin:4px 0 8px"><span class="field-label">Структура посевов</span><button class="btn ghost" id="cReset" style="padding:5px 10px;font-size:12.5px">Как в регионе</button></div>
-        <div class="plan-rows" id="plan"></div>
+        <div class="card-head" style="margin:4px 0 8px"><span class="field-label">План посевов, га</span>
+          <div class="preset-row"><button class="btn ghost" id="cPreset" type="button">Типовой план региона</button><button class="btn ghost" id="cClear" type="button">Очистить</button></div></div>
+        <div id="plan"></div>
       </div>
-      <div class="card-head" style="margin:6px 0 0"><h3>Поправки участка</h3><span class="badge-demo" title="Открытых данных о сорте и агротехнике по полям нет: это пользовательские поправки, они масштабируют прогноз модели">поправки пользователя</span></div>
-      ${selectHtml('cSoil', a.soil, cfg.soil, 'Почва участка относительно региона')}
+      <div class="card-head" style="margin:6px 0 0"><h3>Поправки на ваши поля</h3>${info('Открытых данных о сорте, почве и агротехнике по отдельным полям нет, поэтому это ваши собственные поправки: они умножают прогноз региона.', 'Их можно оставить по умолчанию — тогда расчёт равен региональному.')}</div>
+      ${selectHtml('cSoil', a.soil, cfg.soil, 'Почва относительно региона')}
       ${selectHtml('cVar', a.variety, cfg.variety, 'Сорт / гибрид')}
       ${selectHtml('cTech', a.tech, cfg.tech, 'Агротехника')}
+      <div class="field"><label for="cAdj">Ваша поправка к урожайности, %</label><input class="input num" id="cAdj" type="number" min="-50" max="50" step="1" value="${cfg.adj || 0}"><span class="hint">Если по опыту ваши поля урожайнее (+) или слабее (−) средних по региону</span></div>
       <div class="chip-note" id="multNote"></div>
     </div>
-    <div class="stack">
-      <div class="kpis" id="cK" style="grid-template-columns:repeat(auto-fit,minmax(180px,1fr))"></div>
-      <div class="card">
-        <div class="card-head"><div><h3>Прогноз по культурам</h3><div class="sub" id="cSub"></div></div>${realBadge('цены — ЕМИСС, затраты — допущения', 'Прогноз урожайности — итоговая модель; цены — ЕМИСС 57693; затраты на гектар — допущения по открытым обзорам отрасли, не норматив')}</div>
-        <div class="table-wrap" id="cTbl"></div>
-      </div>
-      <div class="grid g-2">
-        <div class="card"><div class="card-head"><h3>Маржа по культурам</h3><span class="chip-note">диапазон p10–p90</span></div><div class="chart" id="cMargin"></div></div>
-        <div class="card"><div class="card-head"><h3>Плохой, обычный и хороший год</h3></div><div class="scen" id="cScen"></div>
-          <p class="chip-note" style="margin:12px 0 0">Плохой год — урожайность всех культур на нижней границе 80 % интервала (p10), хороший — на верхней (p90). Цены — средние производителей за январь–сентябрь 2026 (ЕМИСС), затраты на гектар — допущение.</p></div>
-      </div>
-    </div>
+    <div class="stack" id="out"></div>
   </div>`;
 
-  const marginChart = chart(el.querySelector('#cMargin'));
-  const editor = () => {
-    const ed = planEditor(cfg, update);
-    el.querySelector('#plan').innerHTML = ed.html + `<div class="sum-line"><span>Итого</span><b>100 %</b></div>`;
-    ed.bind(el.querySelector('#plan'));
-  };
-  editor();
+  const out = el.querySelector('#out');
+  let marginChart = null;
+  const ed = haEditor(cfg, () => update());
+  el.querySelector('#plan').innerHTML = ed.html;
+  ed.bind(el.querySelector('#plan'));
 
+  const redraw = () => { ed.paint(el.querySelector('#plan')); update(); };
   el.querySelector('#cReg').addEventListener('change', (e) => {
-    const area = cfg.area;
-    Object.assign(cfg, newCalc(e.target.value), { area, soil: cfg.soil, variety: cfg.variety, tech: cfg.tech, dateIdx: cfg.dateIdx });
+    const keep = { soil: cfg.soil, variety: cfg.variety, tech: cfg.tech, adj: cfg.adj, dateIdx: cfg.dateIdx };
+    Object.assign(cfg, newCalc(e.target.value, cfg.area > 0 ? cfg.area : 1000), keep);
     state.region = cfg.region;
-    editor(); update();
+    renderCalc(el.closest('.page') || el);   // перерисовать список культур региона
   });
-  el.querySelector('#cReset').addEventListener('click', () => {
-    Object.assign(cfg, { plan: newCalc(cfg.region).plan }); editor(); update();
-  });
-  el.querySelector('#cArea').addEventListener('input', (e) => { const v = +e.target.value; if (v > 0) { cfg.area = Math.min(v, 1e6); update(); } });
+  el.querySelector('#cPreset').addEventListener('click', () => { presetPlan(cfg, cfg.area > 0 ? cfg.area : 1000); redraw(); });
+  el.querySelector('#cClear').addEventListener('click', () => { clearPlan(cfg); redraw(); });
   el.querySelector('#cDate').addEventListener('change', (e) => { cfg.dateIdx = +e.target.value; update(); });
+  el.querySelector('#cAdj').addEventListener('input', (e) => { cfg.adj = Math.max(-50, Math.min(50, +e.target.value || 0)); update(); });
   for (const [id, key] of [['cSoil', 'soil'], ['cVar', 'variety'], ['cTech', 'tech']]) {
     el.querySelector('#' + id).addEventListener('change', (e) => { cfg[key] = e.target.value; update(); });
   }
 
   function update() {
-    const { rows, tot } = cropEcon(cfg);
     const m = multipliers(cfg);
-    el.querySelector('#multNote').innerHTML = `Итоговые множители: урожайность ×${fmt(m.y, 2)}, затраты ×${fmt(m.c, 2)}${m.risk !== 1 ? `, разброс ×${fmt(m.risk, 2)}` : ''}.`;
-    el.querySelector('#cSub').textContent = `${regionName(cfg.region)} · ${fmt(cfg.area, 0)} га · прогноз на ${D.dates[cfg.dateIdx].label.toLowerCase()}`;
+    el.querySelector('#cDateNote').textContent = dateNote(cfg.dateIdx);
+    el.querySelector('#multNote').textContent = `Итого к региональному прогнозу: урожайность ×${fmt(m.y, 2)}, затраты ×${fmt(m.c, 2)}.`;
+    if (cfg.area <= 0) {
+      out.innerHTML = `<div class="card empty-hint"><h3 style="margin-bottom:6px">Задайте план посевов</h3><p style="margin:0 0 14px">Введите гектары хотя бы по одной культуре — или возьмите типовой план региона.</p><button class="btn" id="cPreset2" type="button">Типовой план региона</button></div>`;
+      out.querySelector('#cPreset2').addEventListener('click', () => { presetPlan(cfg, 1000); redraw(); });
+      marginChart = null;
+      return;
+    }
+    const { rows, tot } = cropEcon(cfg);
     const volT = rows.reduce((s, r) => s + r.vol, 0);
-    const marginHa = tot.margin / cfg.area;
-    el.querySelector('#cK').innerHTML = `
-      <div class="kpi hero"><div class="label">Ожидаемая маржа</div><div class="value num">${fmtMoney(tot.margin)}</div><div class="foot">${fmt(marginHa / 1000, 1)} тыс. ₽ с гектара</div></div>
-      <div class="kpi"><div class="label">Выручка</div><div class="value num">${fmtMoney(tot.revenue)}</div><div class="foot">рентабельность ${fmt(tot.margin / tot.cost * 100, 0)} %</div></div>
-      <div class="kpi"><div class="label">Затраты <span class="badge-demo" title="Допущение: полные затраты на 1 га по культуре">допущение</span></div><div class="value num">${fmtMoney(tot.cost)}</div><div class="foot">${fmt(tot.cost / cfg.area / 1000, 1)} тыс. ₽/га</div></div>
-      <div class="kpi"><div class="label">Общий сбор</div><div class="value num">${fmt(volT, 0)}<small>т</small></div><div class="foot">${rows.length} культур${rows.length === 1 ? 'а' : rows.length < 5 ? 'ы' : ''}</div></div>`;
+    if (!out.querySelector('#cK')) {
+      out.innerHTML = `
+      <div class="kpis" id="cK" style="grid-template-columns:repeat(auto-fit,minmax(170px,1fr))"></div>
+      <div class="card">
+        <div class="card-head"><div><h3>Что получится по культурам</h3><div class="sub" id="cSub"></div></div>${info('Урожайность — региональный прогноз итоговой модели с вашими поправками. Цены — средние цены производителей 2026 г. (ЕМИСС).', 'Затраты на гектар — допущения по открытым обзорам отрасли, не норматив.')}</div>
+        <div class="table-wrap" id="cTbl"></div>
+      </div>
+      <div class="card"><div class="card-head"><h3 id="cScenTitle">Плохой, обычный и хороший год</h3></div><div class="scen" id="cScen"></div>
+        <p class="chip-note" style="margin:12px 0 0">«Плохой» и «хороший» год — границы 80 % интервала: такой результат или хуже (лучше) бывает примерно раз в 10 лет.</p></div>
+      <details class="more"><summary><span>Подробнее<small>маржа по культурам</small></span></summary><div class="more-body"><div class="chart" id="cMargin"></div></div></details>`;
+      marginChart = null;
+      out.querySelector('.more').addEventListener('toggle', (e) => { if (e.target.open) { marginChart = chart(out.querySelector('#cMargin')); update(); } });
+    }
+    out.querySelector('#cK').innerHTML = `
+      <div class="kpi"><div class="label">Сбор</div><div class="value num">${fmt(volT, 0)}<small>т</small></div><div class="foot">${fmt(cfg.area, 0)} га · ${rows.length} культур${rows.length === 1 ? 'а' : rows.length < 5 ? 'ы' : ''}</div></div>
+      <div class="kpi"><div class="label">Выручка</div><div class="value num">${fmtMoney(tot.revenue)}</div><div class="foot">затраты ${fmtMoney(tot.cost)} (допущение)</div></div>
+      <div class="kpi hero"><div class="label">Маржа</div><div class="value num">${fmtMoney(tot.margin)}</div><div class="foot">${fmt(tot.margin / cfg.area / 1000, 1)} тыс. ₽ с гектара</div></div>`;
+    out.querySelector('#cSub').textContent = `${regionName(cfg.region)} · ${fmt(cfg.area, 0)} га · ${isFinalDate(cfg.dateIdx) ? 'оценка по фактической погоде сезона' : 'прогноз на ' + D.dates[cfg.dateIdx].label}`;
 
-    el.querySelector('#cTbl').innerHTML = `<table class="table"><thead><tr><th>Культура</th><th>Площадь, га</th><th>т/га</th><th>p10–p90</th><th>Объём, т</th><th>Цена, ₽/т</th><th>Выручка</th><th>Затраты</th><th>Маржа</th></tr></thead><tbody>
+    out.querySelector('#cTbl').innerHTML = `<table class="table"><thead><tr><th>Культура</th><th>Площадь, га</th><th>Урожайность, т/га</th><th>Сбор, т</th><th>Выручка</th><th>Маржа</th></tr></thead><tbody>
       ${rows.map((r) => { const c = crop(r.cc), dg = r.cc === '3060100' ? 1 : 2; return `<tr>
         <td><div class="crop-cell"><span class="ico" style="color:${c.color};background:${alpha(c.color, .14)}">${cropIcon(c)}</span>${c.short}</div></td>
-        <td class="num">${fmt(r.ha, 0)}</td><td class="num"><b>${fmt(r.y.p50, dg)}</b></td><td class="num muted">${fmt(r.y.p10, dg)}–${fmt(r.y.p90, dg)}</td>
-        <td class="num"><b>${fmt(r.vol, 0)}</b></td><td class="num">${fmt(r.price, 0)}</td><td class="num">${fmtMoney(r.revenue)}</td><td class="num">${fmtMoney(r.cost)}</td>
-        <td class="num" style="color:${r.margin >= 0 ? 'var(--pos)' : 'var(--neg)'}"><b>${fmtMoney(r.margin)}</b></td></tr>`; }).join('')}
-      </tbody><tfoot><tr><td>Итого</td><td class="num">${fmt(cfg.area, 0)}</td><td></td><td></td><td class="num">${fmt(volT, 0)}</td><td></td><td class="num">${fmtMoney(tot.revenue)}</td><td class="num">${fmtMoney(tot.cost)}</td><td class="num">${fmtMoney(tot.margin)}</td></tr></tfoot></table>`;
+        <td class="num">${fmt(r.ha, 0)}</td><td class="num"><b>${fmt(r.y.p50, dg)}</b><span class="sub-line">${fmt(r.y.p10, dg)}–${fmt(r.y.p90, dg)}</span></td>
+        <td class="num"><b>${fmt(r.vol, 0)}</b></td><td class="num">${fmtMoney(r.revenue)}<span class="sub-line">${fmt(r.price, 0)} ₽/т</span></td>
+        <td class="num" style="color:${r.margin >= 0 ? 'var(--pos)' : 'var(--neg)'}"><b>${fmtMoney(r.margin)}</b><span class="sub-line">затраты ${fmtMoney(r.cost)}</span></td></tr>`; }).join('')}
+      </tbody><tfoot><tr><td>Итого</td><td class="num">${fmt(cfg.area, 0)}</td><td></td><td class="num">${fmt(volT, 0)}</td><td class="num">${fmtMoney(tot.revenue)}</td><td class="num">${fmtMoney(tot.margin)}<span class="sub-line">затраты ${fmtMoney(tot.cost)}</span></td></tr></tfoot></table>`;
 
-    el.querySelector('#cScen').innerHTML = `
-      <div class="bad"><div class="t">🌵 Плохой год</div><div class="v num">${fmtMoney(tot.lo)}</div><div class="f">маржа при p10</div></div>
-      <div><div class="t">🌤 Обычный год</div><div class="v num">${fmtMoney(tot.margin)}</div><div class="f">маржа при p50</div></div>
-      <div class="good"><div class="t">🌧 Хороший год</div><div class="v num">${fmtMoney(tot.hi)}</div><div class="f">маржа при p90</div></div>`;
+    out.querySelector('#cScen').innerHTML = `
+      <div class="bad"><div class="t">Плохой год</div><div class="v num">${fmtMoney(tot.lo)}</div><div class="f">маржа, раз в ~10 лет хуже</div></div>
+      <div><div class="t">Обычный год</div><div class="v num">${fmtMoney(tot.margin)}</div><div class="f">ожидаемая маржа</div></div>
+      <div class="good"><div class="t">Хороший год</div><div class="v num">${fmtMoney(tot.hi)}</div><div class="f">маржа, раз в ~10 лет лучше</div></div>`;
 
-    const names = rows.map((r) => crop(r.cc).short);
-    marginChart.setOption(opt({
-      grid: { left: 4, right: 10, top: 10, bottom: 4 }, legend: false,
-      tooltip: { trigger: 'axis', axisPointer: { type: 'shadow' }, formatter: (ps) => { const r = rows[ps[0].dataIndex]; return `<b>${crop(r.cc).name}</b><br>Маржа: ${fmtMoney(r.margin)}<br>p10–p90: ${fmtMoney(r.marginLo)} … ${fmtMoney(r.marginHi)}`; } },
-      xAxis: { type: 'category', data: names, axisLabel: { interval: 0, fontSize: 11 } },
-      yAxis: { type: 'value', axisLabel: { formatter: (v) => fmt(v / 1e6, 0) + ' млн' } },
-      series: [
-        { type: 'bar', barWidth: '46%', data: rows.map((r) => ({ value: r.margin, itemStyle: { color: crop(r.cc).color, borderRadius: r.margin >= 0 ? [6, 6, 0, 0] : [0, 0, 6, 6] } })) },
-        { type: 'custom', renderItem: (p, api) => {
-          const lo = api.coord([api.value(0), api.value(1)]), hi = api.coord([api.value(0), api.value(2)]);
-          const st = { stroke: css('--text'), lineWidth: 1.5 };
-          return { type: 'group', children: [
-            { type: 'line', shape: { x1: lo[0], y1: lo[1], x2: hi[0], y2: hi[1] }, style: st },
-            { type: 'line', shape: { x1: lo[0] - 6, y1: lo[1], x2: lo[0] + 6, y2: lo[1] }, style: st },
-            { type: 'line', shape: { x1: hi[0] - 6, y1: hi[1], x2: hi[0] + 6, y2: hi[1] }, style: st }] };
-        }, data: rows.map((r, k) => [k, r.marginLo, r.marginHi]), z: 10 },
-      ],
-    }), true);
+    if (marginChart) {
+      marginChart.setOption(opt({
+        grid: { left: 4, right: 10, top: 10, bottom: 4 }, legend: false,
+        tooltip: { trigger: 'axis', axisPointer: { type: 'shadow' }, formatter: (ps) => { const r = rows[ps[0].dataIndex]; return `<b>${crop(r.cc).name}</b><br>Маржа: ${fmtMoney(r.margin)}<br>плохой – хороший год: ${fmtMoney(r.marginLo)} … ${fmtMoney(r.marginHi)}`; } },
+        xAxis: { type: 'category', data: rows.map((r) => crop(r.cc).short), axisLabel: { interval: 0, fontSize: 11 } },
+        yAxis: { type: 'value', axisLabel: { formatter: (v) => fmt(v / 1e6, 1) + ' млн' } },
+        series: [
+          { type: 'bar', barWidth: '46%', data: rows.map((r) => ({ value: r.margin, itemStyle: { color: crop(r.cc).color, borderRadius: r.margin >= 0 ? [6, 6, 0, 0] : [0, 0, 6, 6] } })) },
+          { type: 'custom', renderItem: (p, api) => {
+            const lo = api.coord([api.value(0), api.value(1)]), hi = api.coord([api.value(0), api.value(2)]);
+            const st = { stroke: css('--text'), lineWidth: 1.5 };
+            return { type: 'group', children: [
+              { type: 'line', shape: { x1: lo[0], y1: lo[1], x2: hi[0], y2: hi[1] }, style: st },
+              { type: 'line', shape: { x1: lo[0] - 6, y1: lo[1], x2: lo[0] + 6, y2: lo[1] }, style: st },
+              { type: 'line', shape: { x1: hi[0] - 6, y1: hi[1], x2: hi[0] + 6, y2: hi[1] }, style: st }] };
+          }, data: rows.map((r, k) => [k, r.marginLo, r.marginHi]), z: 10 },
+        ],
+      }), true);
+    }
   }
   update();
 }

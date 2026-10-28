@@ -2,7 +2,7 @@
 
 export const state = {
   crop: '1010400',      // выбранная культура
-  dateIdx: 4,           // индекс даты прогноза (0 — 1 мая … 4 — конец сезона)
+  dateIdx: 2,           // индекс даты прогноза (0 — 1 мая … 4 — итог сезона по фактической погоде)
   metric: 'yield',      // 'yield' — т/га, 'dev' — к тренду, %
   region: '03000000000',
   calc: null,           // состояние калькулятора (общий план для оптимизации)
@@ -40,10 +40,19 @@ export const isDark = () => {
   return t ? t === 'dark' : matchMedia('(prefers-color-scheme: dark)').matches;
 };
 
-export const demoBadge = (text = 'демо-данные', title = 'Заглушка до выгрузки финальной модели: формат стабильный, значения условные') =>
-  `<span class="badge-demo" title="${esc(title)}">${text}</span>`;
-export const realBadge = (text = 'реальные данные', title = '') =>
-  `<span class="badge-demo badge-real" title="${esc(title)}">${text}</span>`;
+// Компактный значок «i» с поповером «Данные и допущения» вместо россыпи плашек
+export const info = (what, details = '') =>
+  `<details class="info"><summary aria-label="Данные и допущения" title="Данные и допущения">i</summary><div class="pop"><b>Данные и допущения</b><p>${esc(what)}${details ? '<br><span>' + esc(details) + '</span>' : ''}</p></div></details>`;
+export const demoBadge = (text = 'Демо-данные', title = '') => info(text, title);
+export const realBadge = (text = 'Данные', title = '') => info(text, title);
+
+// Подписи дат: «Итог сезона» — это не прогноз, а оценка по фактической погоде
+export const isFinalDate = (i) => i === D.dates.length - 1;
+export const dateBtn = (i) => (isFinalDate(i) ? 'Итог сезона' : D.dates[i].label);
+export const dateNote = (i) => (isFinalDate(i)
+  ? 'Оценка по фактической погоде сезона 2026: это уже не прогноз, а расчёт по тому, какая погода была.'
+  : `Прогноз на ${D.dates[i].label}: погода известна до этой даты, дальше берутся типичные сезоны прошлых лет.`);
+export const dateWhat = (i) => (isFinalDate(i) ? 'оценка по фактической погоде сезона' : `прогноз на ${D.dates[i].label}`);
 
 // Квантиль по массиву
 export function quantile(arr, q) {
@@ -110,6 +119,6 @@ export const seqStops = () => [0, 1, 2, 3, 4, 5, 6].map((i) => css('--seq-' + i)
 export const divStops = () => [0, 1, 2, 3, 4, 5, 6].map((i) => css('--div-' + i));
 export const alpha = (hexc, a) => { const [r, g, b] = hex(hexc); return `rgba(${r},${g},${b},${a})`; };
 
-// Плашка «демо-данные» только если файл помечен meta.mock = true
+// Значок только если файл помечен meta.mock = true (данные-заглушки)
 import { D } from './data.js';
-export const mockBadge = (file, text, title) => (D[file]?.meta?.mock ? demoBadge(text, title) : '');
+export const mockBadge = (file, text, title) => (D[file]?.meta?.mock ? demoBadge(text || 'Демо-данные', title) : '');

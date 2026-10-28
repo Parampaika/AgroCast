@@ -10,10 +10,29 @@ export function calcState() {
   if (!state.calc || !D.forecast.regions[state.calc.region]) state.calc = newCalc(state.region);
   return state.calc;
 }
-export function newCalc(ok) {
+// План хозяйства задаётся в гектарах по каждой культуре (cfg.ha), независимо; доли cfg.plan и общая площадь cfg.area — производные.
+export function newCalc(ok, area = 1000) {
   if (!D.forecast.regions[ok]) ok = '03000000000';
-  return { region: ok, area: 1000, plan: defaultPlan(ok), soil: 'avg', variety: 'standard', tech: 'base', dateIdx: state.dateIdx,
+  const cfg = { region: ok, ha: {}, area: 0, plan: {}, adj: 0, soil: 'avg', variety: 'standard', tech: 'base', dateIdx: state.dateIdx,
     enabled: Object.fromEntries(Object.keys(D.forecast.regions[ok]).map((c) => [c, true])) };
+  presetPlan(cfg, area);
+  return cfg;
+}
+// Типовой план региона на заданную площадь (га)
+export function presetPlan(cfg, area = 1000) {
+  const sh = defaultPlan(cfg.region);
+  cfg.ha = Object.fromEntries(Object.keys(D.forecast.regions[cfg.region]).map((cc) => [cc, Math.round((sh[cc] || 0) * area)]));
+  syncPlan(cfg);
+}
+export function clearPlan(cfg) {
+  cfg.ha = Object.fromEntries(Object.keys(D.forecast.regions[cfg.region]).map((cc) => [cc, 0]));
+  syncPlan(cfg);
+}
+// Общая площадь и доли — из гектаров
+export function syncPlan(cfg) {
+  const tot = Object.values(cfg.ha).reduce((s, v) => s + (v || 0), 0);
+  cfg.area = tot;
+  cfg.plan = Object.fromEntries(Object.entries(cfg.ha).map(([cc, v]) => [cc, tot > 0 ? (v || 0) / tot : 0]));
 }
 
 // Типичная структура посевов региона по площадям 2025 г., округлённая до 5 %
@@ -38,7 +57,8 @@ export function defaultPlan(ok) {
 export function multipliers(cfg) {
   const a = ADJ();
   const so = pick(a.soil, cfg.soil), va = pick(a.variety, cfg.variety), te = pick(a.tech, cfg.tech);
-  return { y: so.yield_mult * va.yield_mult * te.yield_mult, c: so.cost_mult * va.cost_mult * te.cost_mult, risk: va.risk_mult ?? 1 };
+  const user = 1 + (cfg.adj || 0) / 100;   // собственная поправка пользователя к урожайности своих полей
+  return { y: so.yield_mult * va.yield_mult * te.yield_mult * user, c: so.cost_mult * va.cost_mult * te.cost_mult, risk: va.risk_mult ?? 1 };
 }
 
 // Экономика по культурам на дату прогноза
