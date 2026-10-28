@@ -161,6 +161,12 @@ def _normalize(df: pd.DataFrame, src: str) -> pd.DataFrame:
     ren = {"year_scenario": "scenario_year", "scen_year": "scenario_year", "analog_year": "scenario_year",
            "yield": "yield_t_ha", "yhat": "yield_t_ha", "y": "yield_t_ha"}
     df = df.rename(columns={k: v for k, v in ren.items() if k in df.columns and v not in df.columns})
+    if "forecast_date" in df.columns:
+        # data/model/final/scenarios.parquet: сценарии итоговой модели на разных датах; для плана посевов —
+        # дата до начала сезона (вся погода сезона из года-аналога, о 2026 г. ничего не известно)
+        fd = config()["scenarios"].get("forecast_date", "pre_season")
+        df = df[df.forecast_date == fd].copy()
+        src += f" ({fd})"
     if "crop_code" not in df.columns and "crop" in df.columns:
         slug = {"winter_wheat": "1010400", "spring_wheat": "1010500", "barley": "1030100", "maize": "1080202",
                 "sunflower": "3080000", "soy": "3100000", "sugar_beet": "3060100"}

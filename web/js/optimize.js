@@ -44,7 +44,7 @@ export function renderOptimize(el) {
         <div class="card-head" style="margin:0 0 8px"><span class="field-label">Текущий план, ${fmt(cfg.area, 0)} га</span><a class="chip-note" href="#/calc">изменить в калькуляторе</a></div>
         <div class="plan-rows" id="oPlan"></div>
       </div>
-      <p class="chip-note" style="margin:0">Ограничения севооборота — агрономические нормы возврата культуры на поле (подсолнечник ≤ 15 %, свёкла ≤ 20 % и не больше текущей площади), затраты на 1 га — допущения (src/optimize/config.toml). Цель: (1 − осторожность) × средняя прибыль + осторожность × прибыль в худших 20 % сезонов. Учтена убывающая отдача: каждый следующий процент перемен даёт меньше предыдущего (предшественники, худшие участки, перестройка севооборота).</p>
+      <p class="chip-note" style="margin:0">Ограничения севооборота — агрономические нормы возврата культуры на поле (подсолнечник ≤ 15 %, свёкла ≤ 20 % и не больше текущей площади), затраты на 1 га — допущения (src/optimize/config.toml). Цель: (1 − осторожность) × средняя прибыль + осторожность × прибыль в худших 20 % сезонов.${oR ? " Как и в научном расчёте (линейная задача с CVaR), отдача от перемен ограничена допустимым переносом X." : " Учтена убывающая отдача: каждый следующий процент перемен даёт меньше предыдущего (предшественники, худшие участки, перестройка севооборота)."}</p>
     </div>
     <div class="stack">
       <div class="kpis" id="oK" style="grid-template-columns:repeat(auto-fit,minmax(150px,1fr))"></div>
@@ -179,7 +179,7 @@ function regionCardHtml(o) {
     <div class="kpis" id="rK" style="grid-template-columns:repeat(auto-fit,minmax(150px,1fr));margin-bottom:14px"></div>
     <div class="grid g-2">
       <div><div class="diff" id="rDiff"></div>
-        <p class="chip-note" style="margin:12px 0 0">${bt ? `Проверка на прошлых годах ${bt.years[0]}–${bt.years[1]} (план по данным до года t, результат — по факту года t), δ = 10 п.п.: в среднем <b>${bt.real_gain_rub_ha > 0 ? '+' : '−'}${fmt(Math.abs(bt.real_gain_rub_ha), 0)} ₽</b> на гектар, план лучше текущего в ${fmt(bt.win_share_pct, 0)} % лет. ` : ''}Затраты — допущения; выигрыш держится на разнице маржи культур и чувствителен к ценам (reports/optimization.md).</p></div>
+        <p class="chip-note" style="margin:12px 0 0">${bt ? `Проверка на прошлых годах ${bt.years[0]}–${bt.years[1]} (сценарии и тренд — только по истории до года t, результат — по факту года t), δ = 10 п.п.: в среднем <b>${bt.real_gain_rub_ha > 0 ? '+' : '−'}${fmt(Math.abs(bt.real_gain_rub_ha), 0)} ₽</b> на гектар, план лучше текущего в ${fmt(bt.win_share_pct, 0)} % лет. ` : ''}Затраты — допущения; выигрыш держится на разнице маржи культур и чувствителен к ценам (reports/optimization.md).</p></div>
       <div><div class="card-head" style="margin:0 0 4px"><div><h3 style="font-size:14px">Доход — риск</h3><div class="sub">Эффективная граница: каждая точка — оптимум при своём λ</div></div></div><div class="chart" id="rFront" style="height:300px"></div></div>
     </div>
   </div>`;

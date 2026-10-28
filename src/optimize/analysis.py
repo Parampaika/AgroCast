@@ -103,6 +103,51 @@ def _aggregate(regs, delta, lam, alpha, cc=None, kind=None, mult=1.0) -> dict:
     return {"gain_mln": gain, "cvar_gain_mln": cgain, **{f"shift_kha_{c}": v for c, v in shift.items()}}
 
 
+def effect_stats(rec: pd.DataFrame) -> pd.DataFrame:
+    """Распределение эффекта по субъектам: медиана и верхний квартиль прироста (₽/га и % к базе),
+    доля субъектов с выигрышем. % считается только там, где база положительна (иначе он не имеет смысла)."""
+    rows = []
+    for d, g in rec.groupby(rec.delta.fillna(-1)):
+        pos = g[g.mean0 > 0]
+        cpos = g[g.cvar0 > 0]
+        q = lambda s, p: float(np.quantile(s, p)) if len(s) else np.nan  # noqa: E731
+        gp = 100 * pos.gain_rub_ha / pos.mean0
+        cp = 100 * cpos.cvar_gain_rub_ha / cpos.cvar0
+        rows.append({"delta_pp": np.nan if d < 0 else round(d * 100), "n": len(g),
+                     "gain_rub_ha_median": q(g.gain_rub_ha, .5), "gain_rub_ha_q75": q(g.gain_rub_ha, .75),
+                     "gain_pct_median": q(gp, .5), "gain_pct_q75": q(gp, .75), "n_base_pos": len(pos),
+                     "cvar_gain_rub_ha_median": q(g.cvar_gain_rub_ha, .5), "cvar_gain_rub_ha_q75": q(g.cvar_gain_rub_ha, .75),
+                     "cvar_gain_pct_median": q(cp, .5), "cvar_gain_pct_q75": q(cp, .75), "n_cvar_pos": len(cpos),
+                     "share_gain_pct": 100 * float((g.gain_rub_ha > 1).mean()),
+                     "share_gain_ge1pct": 100 * float((gp >= 1).sum() / max(1, len(pos))),
+                     "share_cvar_gain_pct": 100 * float((g.cvar_gain_rub_ha > 1).mean()),
+                     "share_worst_better_pct": 100 * float((g.worst1 > g.worst0 + 1).mean()),
+                     "turnover_pct_median": 100 * q(g.turnover, .5)})
+    return pd.DataFrame(rows)
+
+
+def constraint_decomposition(regs: dict[str, P.Region], deltas, lam: float, alpha: float) -> pd.DataFrame:
+    """Что сдерживает эффект: суммарный прирост при δ без норм севооборота, с нормами на отдельные
+    культуры и с групповыми нормами (полная задача)."""
+    rows = []
+    for d in deltas:
+        acc = {"no_rotation": [0.0, 0.0], "crop_caps": [0.0, 0.0], "full": [0.0, 0.0]}
+        for r in regs.values():
+            k = r.pool_kha * 1e3 / 1e6
+            full = r.problem()
+            s0 = evaluate(full, r.x0, alpha, lam)
+            variants = {"no_rotation": Problem(r.crops, full.R, r.x0, p=full.p),
+                        "crop_caps": Problem(r.crops, full.R, r.x0, hi=full.hi, p=full.p), "full": full}
+            for name, pr in variants.items():
+                s = solve(pr, lam, alpha, d)
+                acc[name][0] += (s.mean - s0.mean) * k
+                acc[name][1] += (s.cvar - s0.cvar) * k
+        for name, (g, c) in acc.items():
+            rows.append({"delta_pp": np.nan if d is None else round(d * 100), "variant": name,
+                         "gain_mln": g, "cvar_gain_mln": c})
+    return pd.DataFrame(rows)
+
+
 # ---------------------------------------------------------------- проверка на отложенных годах
 def backtest(years, deltas, lam: float, alpha: float, window: int = 20, control: float = 0.1) -> pd.DataFrame:
     """План на год t выбирается только по данным до t: сценарии — отклонения от тренда за годы < t,

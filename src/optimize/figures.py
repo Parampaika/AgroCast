@@ -174,8 +174,35 @@ def fig_regions():
     plt.close(fig)
 
 
+def fig_distribution():
+    """Эффект по субъектам: каждая точка — субъект; черта — медиана, рамка — межквартильный размах."""
+    rec = pd.read_pickle(I.OUT / "recommendations.pkl")
+    fig, axs = plt.subplots(1, 2, figsize=(11, 4))
+    rng = np.random.default_rng(0)
+    for ax, col, title, color in ((axs[0], "gain_rub_ha", "Ожидаемая прибыль", BLUE["d10"]),
+                                  (axs[1], "cvar_gain_rub_ha", "Прибыль в худших 20 % сезонов", ORANGE)):
+        labels = []
+        for i, d in enumerate((0.05, 0.1, 0.2)):
+            v = rec[np.isclose(rec.delta, d)][col].to_numpy()
+            ax.scatter(i + rng.uniform(-0.18, 0.18, len(v)), v, s=14, color=color, alpha=0.55, edgecolor="none")
+            q1, q2, q3 = np.quantile(v, [0.25, 0.5, 0.75])
+            ax.add_patch(plt.Rectangle((i - 0.28, q1), 0.56, q3 - q1, fill=False, edgecolor=INK2, lw=1))
+            ax.plot([i - 0.28, i + 0.28], [q2, q2], color=INK, lw=2)
+            labels.append(f"δ = {d * 100:.0f} п.п.\nмедиана {q2:,.0f} · Q3 {q3:,.0f}".replace(",", " "))
+        ax.axhline(0, color=GRAY, lw=1)
+        ax.set_xticks(range(3), labels, fontsize=8.5)
+        ax.set_xlim(-0.5, 2.5)
+        ax.set_ylabel("Прирост к текущему плану, ₽/га")
+        ax.set_title(title)
+    fig.suptitle(f"Эффект по {rec.okato.nunique()} субъектам (каждая точка — субъект)", fontweight="bold", color=INK)
+    fig.tight_layout()
+    fig.savefig(FIG / "optimization_distribution.png")
+    plt.close(fig)
+
+
 def main(showcase):
     style()
+    fig_distribution()
     FIG.mkdir(parents=True, exist_ok=True)
     fig_frontier(showcase)
     fig_delta_curve()

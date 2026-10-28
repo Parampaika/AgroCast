@@ -100,10 +100,13 @@ export function maxShare(cc, plan0) {
 // Убывающая отдача: каждый следующий гектар перемен даёт меньше — добавленная площадь культуры хуже
 // (предшественники, худшие участки), сокращённая требует перестройки севооборота.
 // Потеря выручки растёт квадратично с изменением доли: BETA × Δ² / 2.
+// С расчётом модуля оптимизации (optimization.json) штраф выключен: там, как и в научной постановке
+// (src/optimize, линейная задача с CVaR), убывающую отдачу заменяет ограничение переноса X.
 export const BETA = 2;
+const beta = () => (D.optimization ? 0 : BETA);
 function expansionLoss(c, w, M) {
   const d = w - (M.plan0[c] || 0);
-  return BETA * d * d / 2 * M.rev[c];
+  return beta() * d * d / 2 * M.rev[c];
 }
 
 export function profitByScenario(plan, M, area) {

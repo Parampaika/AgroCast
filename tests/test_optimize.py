@@ -104,3 +104,17 @@ def test_real_region_problem():
     assert np.isfinite(r.yields).all() and (r.yields > 0).all()
     s = solve(r.problem(), 0.5, 0.2, 0.05)
     assert s.status == "ok" and np.abs(s.x - r.x0).max() <= 0.05 + 1e-7
+
+
+def test_model_scenarios_schema():
+    """Таблица сценариев модели приводится к схеме оптимизатора; для плана берётся дата до сезона."""
+    import pandas as pd
+    import inputs as I
+    df = pd.DataFrame({"okato": ["1", "1", "1", "1"], "crop_code": ["1010400"] * 4,
+                       "forecast_date": ["pre_season", "pre_season", "final", "final"],
+                       "scenario_year": [2005, 2006, 2005, 2006], "yield_t_ha": [3.0, 2.0, 9.0, 9.0]})
+    out = I._normalize(df, "test")
+    assert set(out.scenario_year) == {2005, 2006}
+    assert out.yield_t_ha.tolist() == [3.0, 2.0]
+    assert "pre_season" in out.source.iloc[0]
+    assert {"okato", "crop_code", "scenario_year", "yield_t_ha", "weight"} <= set(out.columns)

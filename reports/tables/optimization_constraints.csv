@@ -1,0 +1,10 @@
+delta_pp,variant,gain_mln,cvar_gain_mln
+5,no_rotation,179655.2,161255.0
+5,crop_caps,67975.8,67268.1
+5,full,65242.1,63792.3
+10,no_rotation,340077.1,296852.0
+10,crop_caps,125819.6,122462.3
+10,full,118666.7,114502.0
+20,no_rotation,619992.8,522915.4
+20,crop_caps,208156.6,194201.6
+20,full,191763.6,178842.7

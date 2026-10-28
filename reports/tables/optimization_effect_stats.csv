@@ -1,0 +1,5 @@
+delta_pp,n,gain_rub_ha_median,gain_rub_ha_q75,gain_pct_median,gain_pct_q75,n_base_pos,cvar_gain_rub_ha_median,cvar_gain_rub_ha_q75,cvar_gain_pct_median,cvar_gain_pct_q75,n_cvar_pos,share_gain_pct,share_gain_ge1pct,share_cvar_gain_pct,share_worst_better_pct,turnover_pct_median
+,62,3764.13,8121.57,52.49,188.21,32,3774.90,6517.08,47.90,102.16,21,96.77,93.75,96.77,90.32,53.07
+5.00,62,588.14,1767.26,10.09,25.06,32,519.59,1597.91,16.71,30.61,21,96.77,90.62,96.77,90.32,5.00
+10.00,62,1105.47,3144.07,17.46,50.01,32,989.65,2994.37,25.38,61.22,21,96.77,93.75,96.77,88.71,10.00
+20.00,62,1939.54,5018.34,31.90,91.42,32,1977.05,4500.17,41.88,85.24,21,96.77,93.75,96.77,90.32,20.00

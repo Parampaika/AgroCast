@@ -72,6 +72,23 @@ def step_solve(sc: pd.DataFrame) -> None:
     dc.to_parquet(I.OUT / "delta_curve.parquet", index=False)
     sens = A.sensitivity(regs, 0.1, lam, alpha)
     sens.to_csv(TABLES / "optimization_sensitivity.csv", index=False, float_format="%.2f")
+    A.effect_stats(rec).to_csv(TABLES / "optimization_effect_stats.csv", index=False, float_format="%.2f")
+    A.constraint_decomposition(regs, list(cfg["deltas"]), lam, alpha) \
+        .to_csv(TABLES / "optimization_constraints.csv", index=False, float_format="%.1f")
+    # те же субъекты на исторических сценариях (полный межгодовой разброс) — проверка устойчивости выводов
+    if not str(sc.source.iloc[0]).startswith("hist"):
+        y0, y1 = cfg["scenarios"]["years"]
+        hs = I.hist_scenarios(T, list(range(y0, y1 + 1)))
+        hs = hs[hs.okato.isin(list(regs))]
+        rh = A.recommendations(A.regions_for(hs, T, price_year=T), cfg["deltas"], lam, alpha)
+        cmp = pd.concat([rec.assign(scenarios="модель"), rh.assign(scenarios="история")])
+        cmp["delta_pp"] = (cmp.delta * 100).round().fillna(-1).astype(int)
+        A.effect_stats(rh).to_csv(TABLES / "optimization_effect_stats_hist.csv", index=False, float_format="%.2f")
+        agg = cmp.groupby(["scenarios", "delta_pp"]).agg(
+            n=("okato", "size"), gain_mln=("gain_mln", "sum"), cvar_gain_mln=("cvar_gain_mln", "sum"),
+            mean0_mln=("mean0", lambda s: float((s * cmp.loc[s.index, "pool_kha"]).sum() / 1e3)),
+            cvar0_mln=("cvar0", lambda s: float((s * cmp.loc[s.index, "pool_kha"]).sum() / 1e3))).reset_index()
+        agg.to_csv(TABLES / "optimization_scenario_compare.csv", index=False, float_format="%.1f")
     write_tables(rec, dc, regs)
     print("solve: готово", flush=True)
 
@@ -93,6 +110,11 @@ def write_tables(rec: pd.DataFrame, dc: pd.DataFrame, regs) -> None:
     agg = dc.groupby("delta")[["gain_mln", "cvar_gain_mln"]].sum().reset_index()
     agg["turnover_pct"] = dc.groupby("delta").apply(lambda g: 100 * np.average(g.turnover, weights=g.pool_kha)).to_numpy()
     agg["gain_share_of_d30_pct"] = 100 * agg.gain_mln / agg.gain_mln.iloc[-1]
+    # отдача на перенесённый гектар: прирост ожидаемой прибыли / площадь, которую реально перевели
+    moved = dc.assign(m=dc.turnover * dc.pool_kha * 1e3).groupby("delta").m.sum().to_numpy()
+    agg["moved_kha"] = moved / 1e3
+    agg["gain_rub_per_moved_ha"] = np.where(moved > 0, agg.gain_mln * 1e6 / np.maximum(moved, 1), np.nan)
+    agg["cvar_gain_rub_per_moved_ha"] = np.where(moved > 0, agg.cvar_gain_mln * 1e6 / np.maximum(moved, 1), np.nan)
     agg.to_csv(TABLES / "optimization_delta_curve.csv", index=False, float_format="%.2f")
     # допущения по затратам и калибровка по Росстату
     cfg = I.config()
