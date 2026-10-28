@@ -49,6 +49,111 @@ def fixed_run(crop: str, date: str, name: str, cache: Path) -> pd.DataFrame:
     return p
 
 
+COL = {0: "#9aa0a6", 1: "#6c8ebf", 2: "#d6a23a", 3: "#4f9d69", 4: "#b8392f"}
+
+
+def build_report(df: pd.DataFrame, macro: pd.DataFrame, out: Path) -> None:
+    import matplotlib
+    matplotlib.use("Agg")
+    import matplotlib.pyplot as plt
+    fdir = out / "figures" / "ladder"
+    fdir.mkdir(parents=True, exist_ok=True)
+    plt.rcParams.update({"font.size": 10, "axes.spines.top": False, "axes.spines.right": False,
+                         "axes.grid": True, "grid.alpha": .25, "axes.axisbelow": True})
+    end = df[(df.date == "end") & (df.period == "all")]
+    crops = list(end[end.step == 0].sort_values("crop_name").crop_name)
+    # 1. лесенка по ступеням, конец сезона: MAPE по культурам и в среднем
+    fig, ax = plt.subplots(figsize=(11, 4.8))
+    w = 0.16
+    xs = np.arange(len(crops) + 1)
+    for s in STEPS:
+        v = [end[(end.step == s) & (end.crop_name == c)].mape.iloc[0] for c in crops]
+        v.append(float(np.mean(v)))
+        ax.bar(xs + (s - 2) * w, v, w, color=COL[s], label=f"{s}. {STEPS[s]}")
+    ax.set_xticks(xs, crops + ["Среднее"], rotation=15)
+    ax.set_ylabel("MAPE, %  (меньше — лучше)")
+    ax.set_title("Лесенка моделей: ошибка на конец сезона, скользящая проверка 2012–2025")
+    ax.legend(ncol=2, frameon=False, fontsize=9)
+    fig.tight_layout()
+    fig.savefig(fdir / "ladder_steps.png", dpi=150)
+    plt.close(fig)
+    # 2. качество по датам прогноза: выигрыш к ступени 0, среднее по культурам
+    fig, axs = plt.subplots(1, 2, figsize=(11, 4.4), sharey=True)
+    for ax, per, ttl in zip(axs, ("all", "late"), ("все годы 2012–2025", "отложенные годы 2019–2025")):
+        for s in (1, 2, 3, 4):
+            m = macro[(macro.period == per) & (macro.step == s)].set_index("date").reindex(DATES)
+            ax.plot([DATE_LABEL[d] for d in DATES], m.gain, "o-", color=COL[s], label=f"{s}. {STEPS[s]}", lw=2)
+        ax.set_title(ttl)
+        ax.set_xlabel("Дата прогноза")
+    axs[0].set_ylabel("Снижение MAE к «прошлому году», % (среднее по культурам)")
+    axs[1].legend(frameon=False, fontsize=9, loc="lower right")
+    fig.tight_layout()
+    fig.savefig(fdir / "ladder_by_date.png", dpi=150)
+    plt.close(fig)
+    # 3. тепловая карта культура × ступень (конец сезона), выигрыш к ступени 0
+    piv = end.pivot(index="crop_name", columns="step", values="gain_vs_step0_pct").loc[crops, [1, 2, 3, 4]]
+    fig, ax = plt.subplots(figsize=(7.5, 4.4))
+    im = ax.imshow(piv.to_numpy(), cmap="YlGn", vmin=0, aspect="auto")
+    ax.set_xticks(range(4), [f"{s}. {STEPS[s]}" for s in (1, 2, 3, 4)], rotation=15, ha="right")
+    ax.set_yticks(range(len(crops)), crops)
+    for i in range(piv.shape[0]):
+        for j in range(piv.shape[1]):
+            ax.text(j, i, f"{piv.iloc[i, j]:.0f}", ha="center", va="center", fontsize=10)
+    ax.set_title("Снижение MAE к «прошлому году», %, конец сезона")
+    ax.grid(False)
+    fig.colorbar(im, ax=ax, shrink=.8)
+    fig.tight_layout()
+    fig.savefig(fdir / "ladder_crops_heatmap.png", dpi=150)
+    plt.close(fig)
+    # отчёт
+    def tab(frame):
+        return frame.to_markdown(floatfmt=".2f")
+    t_end = end.pivot(index="crop_name", columns="step", values="mae")
+    t_end.columns = [f"{s}. {STEPS[s]}" for s in t_end.columns]
+    g_end = end.pivot(index="crop_name", columns="step", values="gain_vs_step0_pct")[[1, 2, 3, 4]]
+    g_end.columns = [f"{s}. {STEPS[s]}" for s in g_end.columns]
+    mc = end.groupby("step").agg(mae=("mae", "mean"), rmse=("rmse", "mean"), mape=("mape", "mean"),
+                                 gain=("gain_vs_step0_pct", "mean")).rename(index=STEPS)
+    mc.columns = ["MAE, т/га (среднее по культурам)", "RMSE, т/га", "MAPE, %", "снижение MAE к ступени 0, %"]
+    dm = macro[macro.period == "all"].pivot(index="step_name", columns="date", values="gain").reindex(
+        list(STEPS.values()))[DATES]
+    dm.columns = [DATE_LABEL[d] for d in dm.columns]
+    dl = macro[macro.period == "late"].pivot(index="step_name", columns="date", values="gain").reindex(
+        list(STEPS.values()))[DATES]
+    dl.columns = [DATE_LABEL[d] for d in dl.columns]
+    NL = "\n"
+    L = ["# Лесенка моделей" + NL,
+         "Пять ступеней оцениваются на **одной и той же** скользящей проверке: для каждого года T от 2012 до 2025 модель "
+         "обучается только на сезонах до T, прогноз сравнивается с фактом на одних и тех же парах «субъект × год». "
+         "Выборка: субъекты с посевом ≥ 5 тыс. га и рядом ≥ 15 лет. 2025 год — урожайность восстановлена как сбор / посевная "
+         "(итогов Росстата нет), поэтому все ступени ошибаются относительно одной и той же «правды».",
+         "",
+         "| ступень | что это |", "|---|---|",
+         "| 0. Прошлый год | урожайность прошлого сезона без каких-либо поправок |",
+         "| 1. Тренд без погоды | лучший из «среднее 5 лет» и линейного тренда 10 лет (выбор по годам 2012–2018) |",
+         "| 2. Тренд + погода (Ridge) | линейная модель на аномалиях погоды и окне культуры, цель «отклонение от среднего 5 лет» |",
+         "| 3. Бустинг по умолчанию + спутник | LightGBM с параметрами по умолчанию на погоде, почвах, NDVI, спутнике MODIS (LAI, FPAR, LST), рельефе и прошлых отклонениях |",
+         "| 4. Optuna + ансамбль | лучшая конфигурация перебора на каждую культуру и дату (подбор гиперпараметров и признаков, среднее лучших моделей); выбор по годам 2012–2018 |",
+         "",
+         "## Итог на конец сезона", "", tab(mc), "",
+         "![лесенка](figures/ladder/ladder_steps.png)", "",
+         "### MAE по культурам, т/га", "", tab(t_end), "",
+         "### Снижение MAE к ступени 0, %", "", tab(g_end), "",
+         "![культуры × ступени](figures/ladder/ladder_crops_heatmap.png)", "",
+         "## Качество по датам прогноза", "",
+         "Среднее по семи культурам снижение MAE к «прошлому году», %. Все годы 2012–2025:", "", tab(dm), "",
+         "Отложенные годы 2019–2025 (в подборе гиперпараметров не участвовали):", "", tab(dl), "",
+         "![по датам](figures/ladder/ladder_by_date.png)", "",
+         "Полные таблицы с RMSE и MAPE по культурам и датам — `reports/tables/ladder_by_crop_date.csv`.", "",
+         "## Примечания", "",
+         "- Ступени 0–1 не зависят от даты: к любой дате они известны одинаково.",
+         "- Ступень 4 выбирается по DEV-годам 2012–2018, поэтому отложенные годы дают честную оценку.",
+         "- Честно о монотонности: лесенка растёт не на каждом шаге. Бустинг по умолчанию со спутником в среднем не лучше Ridge с погодой (разница в пределах шума), выигрыш даёт именно подбор гиперпараметров, набора признаков и ансамбль. На отложенных годах 2019–2025 ступень 4 лучше ступени 2 заметно только к концу сезона; ранние даты (1 мая) почти не отличаются.",
+         "- Ступени 2–3 зафиксированы заранее (конфигурация не подбиралась под результат), чтобы показать вклад каждого шага."]
+    (out / "ladder.md").write_text(NL.join(L) + NL, encoding="utf-8")
+    print("отчёт записан:", out / "ladder.md")
+
+
 def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("--results", default="data/model/v2")
@@ -95,6 +200,7 @@ def main() -> None:
         gain=("gain_vs_step0_pct", "mean"), mape=("mape", "mean")).reset_index()
     macro.to_csv(tdir / "ladder_macro_by_date.csv", index=False, encoding="utf-8")
     print("таблицы записаны в", tdir)
+    build_report(df, macro, D.ROOT / a.out)
 
 
 if __name__ == "__main__":
