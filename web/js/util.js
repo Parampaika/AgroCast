@@ -41,8 +41,8 @@ export const isDark = () => {
 };
 
 // Компактный значок «i» с поповером «Данные и допущения» вместо россыпи плашек
-export const info = (what, details = '') =>
-  `<details class="info"><summary aria-label="Данные и допущения" title="Данные и допущения">i</summary><div class="pop"><b>Данные и допущения</b><p>${esc(what)}${details ? '<br><span>' + esc(details) + '</span>' : ''}</p></div></details>`;
+export const info = (what, details = '', align = '') =>
+  `<details class="info ${align}"><summary aria-label="Данные и допущения" title="Данные и допущения">i</summary><div class="pop"><b>Данные и допущения</b><p>${esc(what)}${details ? '<br><span>' + esc(details) + '</span>' : ''}</p></div></details>`;
 export const demoBadge = (text = 'Демо-данные', title = '') => info(text, title);
 export const realBadge = (text = 'Данные', title = '') => info(text, title);
 

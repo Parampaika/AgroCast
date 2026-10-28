@@ -12,10 +12,10 @@ const main = document.getElementById('main');
 
 function route() {
   const [path, query = ''] = location.hash.split('?');
-  const [, name = 'overview', arg] = path.split('/');
-  const r = ROUTES[name] ? name : 'overview';
+  const [, name = 'calc', arg] = path.split('/');
+  const r = ROUTES[name] ? name : 'calc';
   if (r === 'region' && arg) state.region = arg;
-  document.querySelectorAll('#nav a').forEach((a) => a.classList.toggle('active', a.dataset.route === r));
+  document.querySelectorAll('#nav a').forEach((a) => a.classList.toggle('active', a.dataset.route === (r === 'region' ? 'overview' : r)));
   disposeCharts();
   main.innerHTML = '';
   const page = document.createElement('div');

@@ -58,15 +58,15 @@ export function renderOverview(el) {
   el.innerHTML = `
   <div class="page-head" style="margin-bottom:14px">
     <div>
-      <div class="eyebrow">Сезон 2026</div>
+      <div class="eyebrow">Регионы · сезон 2026</div>
       <h1>Прогноз урожайности по регионам России</h1>
-      <p class="lead">Прогноз на каждый месяц сезона и подсказка, как немного изменить посевы, чтобы заработать больше.</p>
-      <span class="frame">Прогноз — для региона в целом (среднее по хозяйствам субъекта), а не для отдельного поля.</span>
+      <p class="lead">Региональная модель — основа калькулятора участка: где и насколько урожай ожидается выше или ниже обычного.</p>
+      <span class="frame">Это прогноз для региона в целом (среднее по хозяйствам субъекта), а не для отдельного поля.</span>
     </div>
   </div>
   <nav class="entry" aria-label="Разделы">
-    <a href="#/overview" class="here" id="goMap"><span class="ei">${IC.map}</span><span><b>Прогноз по регионам</b><small>Карта: где урожай выше или ниже обычного</small></span></a>
-    <a href="#/calc"><span class="ei">${IC.calc}</span><span><b>Калькулятор хозяйства</b><small>Сбор, выручка и маржа по вашему плану</small></span></a>
+    <a href="#/calc" class="here"><span class="ei">${IC.calc}</span><span><b>Рассчитать урожай моего участка</b><small>Регион, площадь, почва, сорт, агротехника → т/га, сбор, маржа</small></span></a>
+    <a href="#/overview" id="goMap"><span class="ei">${IC.map}</span><span><b>Прогноз по регионам</b><small>Карта: где урожай выше или ниже обычного</small></span></a>
     <a href="#/optimize"><span class="ei">${IC.opt}</span><span><b>Что посеять</b><small>Как немного изменить план ради прибыли</small></span></a>
   </nav>
   <div class="toolbar" style="margin-bottom:14px" id="cropBar"></div>

@@ -1,4 +1,4 @@
-// Экран «Калькулятор хозяйства»: план посевов в гектарах + поправки → урожайность, сбор, выручка, затраты, маржа.
+// Экран «Калькулятор участка»: параметры участка (регион, план в гектарах, почва, сорт, агротехника, дата) → результат по культурам.
 import { D, crop, regionName, regionsAll } from './data.js';
 import { cropIcon } from './icons.js';
 import { calcState, newCalc, presetPlan, clearPlan, syncPlan, cropEcon, ADJ, multipliers } from './econ.js';
@@ -18,14 +18,14 @@ export function haEditor(cfg, onChange) {
     </div>`;
   }).join('');
   const html = `<div class="ha-rows" id="haRows">${rowsHtml}</div>
-    <div class="ha-total"><span>Всего в плане</span><b class="num" id="haTotal"></b></div>`;
+    <div class="ha-total"><span>Площадь участка (сумма)</span><b class="num" id="haTotal"></b></div>`;
   const paint = (root) => {
     root.querySelectorAll('.ha-row').forEach((row) => {
       const cc = row.dataset.cc, v = Math.round(cfg.ha[cc] || 0);
       const inp = row.querySelector('input');
       if (document.activeElement !== inp) inp.value = v;
       row.classList.toggle('off', !v);
-      row.querySelector('.sh').textContent = cfg.area > 0 && v ? `${fmt((v / cfg.area) * 100, 0)} % плана` : 'не сеем';
+      row.querySelector('.sh').textContent = cfg.area > 0 && v ? `${fmt((v / cfg.area) * 100, 0)} % площади` : 'не сеем';
     });
     const t = root.querySelector('#haTotal');
     if (t) t.textContent = fmt(cfg.area, 0) + ' га';
@@ -46,38 +46,46 @@ export const planEditor = haEditor;
 const selectHtml = (id, list, val, label) => `<div class="field"><label for="${id}">${label}</label>
   <select class="select" id="${id}">${list.map((x) => `<option value="${x.id}" ${x.id === val ? 'selected' : ''}>${esc(x.label)}</option>`).join('')}</select></div>`;
 
+// Поповер «Как считается» — честно: что из модели, что допущение
+export const HOW = `<span class="how">Как считается ${info(
+  'Климат и погода региона и сезона — из обученной модели «тренд × погода» (данные ЕМИСС и ERA5). Это базовая урожайность «среднего хозяйства региона».',
+  'Влияние почвы, сорта и агротехники — множители-допущения: открытых данных об урожайности по сортам и агротехнике хозяйств нет, поэтому они не оценены по данным. Прогноз для вашего участка = прогноз региона, скорректированный на эти множители. Цены — ЕМИСС 2026, затраты на гектар — допущения.', 'left')}</span>`;
+
 export function renderCalc(el) {
   const cfg = calcState();
   const a = ADJ();
   el.innerHTML = `
   <div class="page-head">
     <div>
-      <div class="eyebrow">Калькулятор хозяйства</div>
-      <h1>Сколько соберёте и сколько заработаете</h1>
-      <p class="lead">Задайте, сколько гектаров под какой культурой, — получите урожайность, сбор, выручку и маржу.</p>
-      <span class="frame"><b>Как считаем:</b> берём прогноз по вашему региону в целом — так, как будто ваши поля урожайны, как в среднем по региону. Отличия ваших полей учтите поправками ниже.</span>
+      <div class="eyebrow">Калькулятор участка</div>
+      <h1>Рассчитайте урожай своего участка</h1>
+      <p class="lead">Введите регион, площадь, почву, сорт и агротехнику — получите урожайность в т/га, общий сбор, выручку и маржу для нескольких культур. Прогноз строится по погоде и данным вашего региона.</p>
+      <span class="frame">Прогноз для вашего участка = прогноз региона, скорректированный на почву, сорт и агротехнику. ${HOW}</span>
     </div>
     <a class="btn" href="#/optimize"><svg viewBox="0 0 24 24"><path d="M5 15l4-4 3 3 7-7"/><path d="M15 7h4v4"/></svg>Что посеять</a>
   </div>
-  <div class="grid g-calc">
-    <div class="card stack" style="gap:16px">
-      <div class="card-head" style="margin:0"><h3>Ваше хозяйство</h3></div>
-      <div class="field"><label for="cReg">Регион</label><select class="select" id="cReg">${regionsAll().map((r) => `<option value="${r}" ${r === cfg.region ? 'selected' : ''}>${esc(regionName(r))}</option>`).join('')}</select></div>
-      <div class="field"><label for="cDate">На какую дату считать</label><select class="select" id="cDate">${D.dates.map((d, i) => `<option value="${i}" ${i === cfg.dateIdx ? 'selected' : ''}>${isFinalDate(i) ? 'Итог сезона (по фактической погоде)' : 'Прогноз на ' + d.label}</option>`).join('')}</select><span class="hint" id="cDateNote"></span></div>
-      <div>
-        <div class="card-head" style="margin:4px 0 8px"><span class="field-label">План посевов, га</span>
-          <div class="preset-row"><button class="btn ghost" id="cPreset" type="button">Типовой план региона</button><button class="btn ghost" id="cClear" type="button">Очистить</button></div></div>
-        <div id="plan"></div>
+  <div class="card params">
+    <div class="card-head" style="margin-bottom:14px"><h3>Параметры участка</h3></div>
+    <div class="params-grid">
+      <div class="stack" style="gap:16px">
+        <div class="field"><label for="cReg">Регион</label><select class="select" id="cReg">${regionsAll().map((r) => `<option value="${r}" ${r === cfg.region ? 'selected' : ''}>${esc(regionName(r))}</option>`).join('')}</select></div>
+        <div class="field"><label for="cDate">На какую дату считать</label><select class="select" id="cDate">${D.dates.map((d, i) => `<option value="${i}" ${i === cfg.dateIdx ? 'selected' : ''}>${isFinalDate(i) ? 'Итог сезона (по фактической погоде)' : 'Прогноз на ' + d.label}</option>`).join('')}</select><span class="hint" id="cDateNote"></span></div>
       </div>
-      <div class="card-head" style="margin:6px 0 0"><h3>Поправки на ваши поля</h3>${info('Открытых данных о сорте, почве и агротехнике по отдельным полям нет, поэтому это ваши собственные поправки: они умножают прогноз региона.', 'Их можно оставить по умолчанию — тогда расчёт равен региональному.')}</div>
-      ${selectHtml('cSoil', a.soil, cfg.soil, 'Почва относительно региона')}
-      ${selectHtml('cVar', a.variety, cfg.variety, 'Сорт / гибрид')}
-      ${selectHtml('cTech', a.tech, cfg.tech, 'Агротехника')}
-      <div class="field"><label for="cAdj">Ваша поправка к урожайности, %</label><input class="input num" id="cAdj" type="number" min="-50" max="50" step="1" value="${cfg.adj || 0}"><span class="hint">Если по опыту ваши поля урожайнее (+) или слабее (−) средних по региону</span></div>
-      <div class="chip-note" id="multNote"></div>
+      <div class="stack" style="gap:16px">
+        ${selectHtml('cSoil', a.soil, cfg.soil, 'Почва участка относительно региона')}
+        ${selectHtml('cVar', a.variety, cfg.variety, 'Сорт семян')}
+        ${selectHtml('cTech', a.tech, cfg.tech, 'Агротехника')}
+        <div class="field"><label for="cAdj">Ваша поправка к урожайности, %</label><input class="input num" id="cAdj" type="number" min="-50" max="50" step="1" value="${cfg.adj || 0}"><span class="hint">Если по опыту ваши поля урожайнее (+) или слабее (−) средних по региону</span></div>
+        <div class="chip-note" id="multNote"></div>
+      </div>
     </div>
-    <div class="stack" id="out"></div>
-  </div>`;
+    <div style="margin-top:18px">
+      <div class="card-head" style="margin:0 0 10px"><span class="field-label">План посевов, га (площадь по культурам)</span>
+        <div class="preset-row"><button class="btn ghost" id="cPreset" type="button">Типовой план региона</button><button class="btn ghost" id="cClear" type="button">Очистить</button></div></div>
+      <div id="plan"></div>
+    </div>
+  </div>
+  <div class="stack" id="out" style="margin-top:18px"></div>`;
 
   const out = el.querySelector('#out');
   let marginChart = null;
@@ -103,7 +111,7 @@ export function renderCalc(el) {
   function update() {
     const m = multipliers(cfg);
     el.querySelector('#cDateNote').textContent = dateNote(cfg.dateIdx);
-    el.querySelector('#multNote').textContent = `Итого к региональному прогнозу: урожайность ×${fmt(m.y, 2)}, затраты ×${fmt(m.c, 2)}.`;
+    el.querySelector('#multNote').textContent = `Итого к прогнозу региона: урожайность ×${fmt(m.y, 2)}, затраты ×${fmt(m.c, 2)} (допущения).`;
     if (cfg.area <= 0) {
       out.innerHTML = `<div class="card empty-hint"><h3 style="margin-bottom:6px">Задайте план посевов</h3><p style="margin:0 0 14px">Введите гектары хотя бы по одной культуре — или возьмите типовой план региона.</p><button class="btn" id="cPreset2" type="button">Типовой план региона</button></div>`;
       out.querySelector('#cPreset2').addEventListener('click', () => { presetPlan(cfg, 1000); redraw(); });
@@ -116,33 +124,41 @@ export function renderCalc(el) {
       out.innerHTML = `
       <div class="kpis" id="cK" style="grid-template-columns:repeat(auto-fit,minmax(170px,1fr))"></div>
       <div class="card">
-        <div class="card-head"><div><h3>Что получится по культурам</h3><div class="sub" id="cSub"></div></div>${info('Урожайность — региональный прогноз итоговой модели с вашими поправками. Цены — средние цены производителей 2026 г. (ЕМИСС).', 'Затраты на гектар — допущения по открытым обзорам отрасли, не норматив.')}</div>
+        <div class="card-head"><div><h3>Что получится по культурам</h3><div class="sub" id="cSub"></div></div>${HOW}</div>
         <div class="table-wrap" id="cTbl"></div>
       </div>
-      <div class="card"><div class="card-head"><h3 id="cScenTitle">Плохой, обычный и хороший год</h3></div><div class="scen" id="cScen"></div>
-        <p class="chip-note" style="margin:12px 0 0">«Плохой» и «хороший» год — границы 80 % интервала: такой результат или хуже (лучше) бывает примерно раз в 10 лет.</p></div>
+      <div class="card"><div class="card-head"><h3>Плохой, обычный и хороший год</h3></div><div class="scen" id="cScen"></div>
+        <p class="chip-note" style="margin:12px 0 0">«Плохой» и «хороший» год — границы 80 % интервала прогноза: такой результат или хуже (лучше) бывает примерно раз в 10 лет.</p></div>
+      <div class="card gives" id="cGives"></div>
       <details class="more"><summary><span>Подробнее<small>маржа по культурам</small></span></summary><div class="more-body"><div class="chart" id="cMargin"></div></div></details>`;
       marginChart = null;
       out.querySelector('.more').addEventListener('toggle', (e) => { if (e.target.open) { marginChart = chart(out.querySelector('#cMargin')); update(); } });
     }
     out.querySelector('#cK').innerHTML = `
-      <div class="kpi"><div class="label">Сбор</div><div class="value num">${fmt(volT, 0)}<small>т</small></div><div class="foot">${fmt(cfg.area, 0)} га · ${rows.length} культур${rows.length === 1 ? 'а' : rows.length < 5 ? 'ы' : ''}</div></div>
+      <div class="kpi"><div class="label">Общий сбор</div><div class="value num">${fmt(volT, 0)}<small>т</small></div><div class="foot">${fmt(cfg.area, 0)} га · ${rows.length} культур${rows.length === 1 ? 'а' : rows.length < 5 ? 'ы' : ''}</div></div>
       <div class="kpi"><div class="label">Выручка</div><div class="value num">${fmtMoney(tot.revenue)}</div><div class="foot">затраты ${fmtMoney(tot.cost)} (допущение)</div></div>
       <div class="kpi hero"><div class="label">Маржа</div><div class="value num">${fmtMoney(tot.margin)}</div><div class="foot">${fmt(tot.margin / cfg.area / 1000, 1)} тыс. ₽ с гектара</div></div>`;
     out.querySelector('#cSub').textContent = `${regionName(cfg.region)} · ${fmt(cfg.area, 0)} га · ${isFinalDate(cfg.dateIdx) ? 'оценка по фактической погоде сезона' : 'прогноз на ' + D.dates[cfg.dateIdx].label}`;
 
-    out.querySelector('#cTbl').innerHTML = `<table class="table"><thead><tr><th>Культура</th><th>Площадь, га</th><th>Урожайность, т/га</th><th>Сбор, т</th><th>Выручка</th><th>Маржа</th></tr></thead><tbody>
+    out.querySelector('#cTbl').innerHTML = `<table class="table"><thead><tr><th>Культура</th><th>Площадь, га</th><th>Урожайность, т/га</th><th>Общий сбор, т</th><th>Выручка</th><th>Затраты</th><th>Маржа</th></tr></thead><tbody>
       ${rows.map((r) => { const c = crop(r.cc), dg = r.cc === '3060100' ? 1 : 2; return `<tr>
         <td><div class="crop-cell"><span class="ico" style="color:${c.color};background:${alpha(c.color, .14)}">${cropIcon(c)}</span>${c.short}</div></td>
         <td class="num">${fmt(r.ha, 0)}</td><td class="num"><b>${fmt(r.y.p50, dg)}</b><span class="sub-line">${fmt(r.y.p10, dg)}–${fmt(r.y.p90, dg)}</span></td>
-        <td class="num"><b>${fmt(r.vol, 0)}</b></td><td class="num">${fmtMoney(r.revenue)}<span class="sub-line">${fmt(r.price, 0)} ₽/т</span></td>
-        <td class="num" style="color:${r.margin >= 0 ? 'var(--pos)' : 'var(--neg)'}"><b>${fmtMoney(r.margin)}</b><span class="sub-line">затраты ${fmtMoney(r.cost)}</span></td></tr>`; }).join('')}
-      </tbody><tfoot><tr><td>Итого</td><td class="num">${fmt(cfg.area, 0)}</td><td></td><td class="num">${fmt(volT, 0)}</td><td class="num">${fmtMoney(tot.revenue)}</td><td class="num">${fmtMoney(tot.margin)}<span class="sub-line">затраты ${fmtMoney(tot.cost)}</span></td></tr></tfoot></table>`;
+        <td class="num"><b>${fmt(r.vol, 0)}</b></td><td class="num">${fmtMoney(r.revenue)}<span class="sub-line">${fmt(r.price, 0)} ₽/т</span></td><td class="num">${fmtMoney(r.cost)}</td>
+        <td class="num" style="color:${r.margin >= 0 ? 'var(--pos)' : 'var(--neg)'}"><b>${fmtMoney(r.margin)}</b></td></tr>`; }).join('')}
+      </tbody><tfoot><tr><td>Итого</td><td class="num">${fmt(cfg.area, 0)}</td><td></td><td class="num">${fmt(volT, 0)}</td><td class="num">${fmtMoney(tot.revenue)}</td><td class="num">${fmtMoney(tot.cost)}</td><td class="num">${fmtMoney(tot.margin)}</td></tr></tfoot></table>`;
 
     out.querySelector('#cScen').innerHTML = `
       <div class="bad"><div class="t">Плохой год</div><div class="v num">${fmtMoney(tot.lo)}</div><div class="f">маржа, раз в ~10 лет хуже</div></div>
       <div><div class="t">Обычный год</div><div class="v num">${fmtMoney(tot.margin)}</div><div class="f">ожидаемая маржа</div></div>
       <div class="good"><div class="t">Хороший год</div><div class="v num">${fmtMoney(tot.hi)}</div><div class="f">маржа, раз в ~10 лет лучше</div></div>`;
+
+    out.querySelector('#cGives').innerHTML = `<div class="card-head"><h3>Что это даёт для планирования</h3></div>
+      <ul class="gives-list">
+        <li><b>Затраты.</b> На сезон понадобится около <b>${fmtMoney(tot.cost)}</b> (${fmt(tot.cost / cfg.area / 1000, 0)} тыс. ₽ на гектар, допущение) — столько нужно иметь или привлечь до посевной.</li>
+        <li><b>Доход.</b> В обычный год выручка около <b>${fmtMoney(tot.revenue)}</b>, маржа ${fmtMoney(tot.margin)}; в плохой год маржа ${tot.lo >= 0 ? 'остаётся' : 'уходит в минус:'} <b>${fmtMoney(tot.lo)}</b>, в хороший — ${fmtMoney(tot.hi)}. Запас на плохой год стоит заложить заранее.</li>
+        <li><b>Что менять.</b> Небольшой перенос площади между культурами может поднять прибыль и сделать плохой год мягче. <a href="#/optimize">Посмотреть в оптимизации →</a></li>
+      </ul>`;
 
     if (marginChart) {
       marginChart.setOption(opt({

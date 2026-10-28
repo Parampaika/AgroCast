@@ -471,3 +471,15 @@ input[type="range"]:active::-webkit-slider-thumb { transform: scale(1.15); }
 @media (max-width: 1180px) { .g-calc { grid-template-columns: 1fr; } }
 
 @media (max-width: 520px) { #cK .kpi.hero { grid-column: 1 / -1; } }
+
+/* v3: калькулятор участка — параметры сверху, результат ниже */
+.params { padding: 20px 22px; }
+.params-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 20px 32px; }
+.how { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; font-weight: 600; color: var(--text-2); white-space: nowrap; }
+.info.left .pop { right: auto; left: 0; }
+.gives-list { margin: 0; padding-left: 18px; display: flex; flex-direction: column; gap: 10px; color: var(--text-2); font-size: 14px; }
+.gives-list b { color: var(--text); }
+.map-wrap { aspect-ratio: 2; max-height: 470px; }
+@media (min-width: 861px) and (max-width: 1360px) { #out .table .crop-cell .ico { display: grid; } }
+@media (max-width: 860px) { .params-grid { grid-template-columns: 1fr; } .params { padding: 16px; } .map-wrap { aspect-ratio: 1.55; } }
+.params .ha-rows { display: grid; grid-template-columns: repeat(auto-fill, minmax(290px, 1fr)); gap: 12px 32px; }
