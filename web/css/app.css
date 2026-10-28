@@ -469,3 +469,5 @@ input[type="range"]:active::-webkit-slider-thumb { transform: scale(1.15); }
 .g-calc .table th { font-size: 10.5px; }
 .g-calc .table th, .g-calc .table td { padding: 9px 5px; }
 @media (max-width: 1180px) { .g-calc { grid-template-columns: 1fr; } }
+
+@media (max-width: 520px) { #cK .kpi.hero { grid-column: 1 / -1; } }

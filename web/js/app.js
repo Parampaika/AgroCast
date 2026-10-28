@@ -11,7 +11,8 @@ const ROUTES = { overview: renderOverview, region: renderRegion, calc: renderCal
 const main = document.getElementById('main');
 
 function route() {
-  const [, name = 'overview', arg] = location.hash.split('/');
+  const [path, query = ''] = location.hash.split('?');
+  const [, name = 'overview', arg] = path.split('/');
   const r = ROUTES[name] ? name : 'overview';
   if (r === 'region' && arg) state.region = arg;
   document.querySelectorAll('#nav a').forEach((a) => a.classList.toggle('active', a.dataset.route === r));
@@ -21,6 +22,8 @@ function route() {
   page.className = 'page';
   main.appendChild(page);
   ROUTES[r](page);
+  // #/optimize?open — раскрыть все «Подробнее» (для ссылок и скриншотов)
+  if (query === 'open') page.querySelectorAll('details.more').forEach((d) => { d.open = true; });
   if (!route.first) window.scrollTo({ top: 0 });
   route.first = false;
 }

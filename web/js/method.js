@@ -17,7 +17,7 @@ export function renderMethod(el) {
   <div class="page-head"><div>
     <div class="eyebrow">О методике</div>
     <h1>Открытые данные → модель → прогноз → решение</h1>
-    <p class="lead">Модель предсказывает не урожайность «в лоб», а отклонение от технологического тренда, которое объясняет погода сезона. Выход — распределение по погодным сценариям, а не одна точка.</p>
+    <p class="lead">Модель оценивает, насколько погода сезона сдвигает урожайность относительно обычного уровня региона. Итог — диапазон («плохой, обычный, хороший год»), а не одна цифра.</p>
   </div></div>
   <div class="card" style="margin-bottom:18px"><div class="card-head"><h3>Источники данных</h3><span class="chip-note">все открытые, без ключей</span></div>
     <div class="sources" style="grid-template-columns:repeat(auto-fit,minmax(210px,1fr))">${SOURCES.map(([ic, h, p]) => `<div class="source"><div class="ic">${SRC_ICONS[ic]}</div><h4>${h}</h4><p>${p}</p></div>`).join('')}</div>
@@ -31,8 +31,8 @@ export function renderMethod(el) {
     </div>
   </div>
   <div class="grid g-2">
-    <div class="card"><div class="card-head"><div><h3>Точность: MAPE по субъектам, %</h3><div class="sub">Скользящая проверка 2012–2025, меньше — лучше</div></div>${mockBadge('metrics', 'предварительная модель', 'Результаты исследовательской модели (reports/model_weather.md); финальная модель ещё подбирается')}</div><div class="chart lg" id="mAcc"></div></div>
-    <div class="card"><div class="card-head"><div><h3>Выигрыш погоды к тренду по дате прогноза</h3><div class="sub">Снижение MAE относительно линейного тренда, %</div></div>${mockBadge('metrics', 'предварительная модель')}</div><div class="chart lg" id="mLead"></div></div>
+    <div class="card"><div class="card-head"><div><h3>Модель ошибается реже, чем простые правила</h3><div class="sub">Средняя ошибка прогноза по регионам, %, проверка на прошлых годах 2012–2025: меньше — лучше</div></div>${mockBadge('metrics', 'Предварительная модель', 'Результаты исследовательской модели (reports/model_weather.md); финальная модель ещё подбирается')}</div><div class="chart lg" id="mAcc"></div></div>
+    <div class="card"><div class="card-head"><div><h3>Погода начинает помогать с июля–августа</h3><div class="sub">На сколько % ошибка меньше, чем у «обычного уровня» (тренда), по дате прогноза</div></div>${mockBadge('metrics', 'Предварительная модель')}</div><div class="chart lg" id="mLead"></div></div>
   </div>
   <div class="card" style="margin-top:18px"><div class="card-head"><h3>Честные ограничения</h3></div>
     <ul class="limits">
