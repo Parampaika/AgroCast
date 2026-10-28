@@ -300,20 +300,45 @@ def ladder_end(out: Path) -> bool:
     lad = S.ladder()
     if lad is None:
         return False
-    q = lad[(lad.date == "end") & (lad.period == "all")]
-    g = q.pivot(index="crop", columns="step", values="mape").reindex(CROP_ORDER)
+    q = lad[(lad.date == "end") & (lad.period == "all") & (lad.step > 0)]
+    g = q.pivot(index="crop", columns="step", values="gain_vs_step0_pct").reindex(CROP_ORDER)
     names = q.drop_duplicates("step").set_index("step").step_name.sort_index()
-    fig, ax = plt.subplots(figsize=(W, 3.2))
+    fig, ax = plt.subplots(figsize=(W, 3.3))
     y = np.arange(len(g))
     n = g.shape[1]
     h = 0.8 / n
-    for i, s in enumerate(g.columns):
-        ax.barh(y + (i - (n - 1) / 2) * h, g[s], h * 0.9, color=ORD5[i % 5], label=f"{s}. {names[s]}")
+    for i, s_ in enumerate(g.columns):
+        ax.barh(y + (i - (n - 1) / 2) * h, g[s_], h * 0.9, color=ORD5[int(s_) % 5], label=f"{s_}. {names[s_]}")
+    for yi, v in enumerate(g[g.columns.max()]):
+        ax.text(v + 0.6, yi + (n - 1) / 2 * h, f"{v:.0f} %", va="center", fontsize=7, color=INK2)
     ax.set_yticks(y, _crop_axis(g.index))
     ax.invert_yaxis()
     ax.grid(axis="y", visible=False)
-    ax.set_xlabel("MAPE по субъектам, % (скользящая проверка 2012–2025, конец сезона)")
-    ax.legend(loc="upper center", bbox_to_anchor=(0.5, 1.2), ncol=3, fontsize=7)
+    ax.set_xlabel("снижение MAE к прогнозу «прошлый год», % (скользящая проверка 2012–2025, конец сезона)")
+    ax.legend(loc="upper center", bbox_to_anchor=(0.5, 1.17), ncol=2, fontsize=7)
+    return _save(fig, out)
+
+
+def ladder_macro(out: Path) -> bool:
+    m = S.ladder_macro()
+    if m is None:
+        return False
+    m = m[m.date == "end"]
+    a = m[m.period == "all"].set_index("step").sort_index()
+    late = m[m.period == "late"].set_index("step").gain.reindex(a.index)
+    fig, ax = plt.subplots(figsize=(W, 2.6))
+    x = np.arange(len(a))
+    ax.bar(x, a.gain, color=[ORD5[int(i) % 5] for i in a.index], width=0.62, label="2012–2025")
+    ax.plot(x, late, "D", color=ORANGE, ms=6, mec="white", mew=1.2, label="только отложенные 2019–2025")
+    for xi, v in zip(x, a.gain):
+        if v > 0.5:
+            ax.text(xi, v - 2.6, f"−{v:.0f} %", ha="center", fontsize=8.5, color="white", weight="bold")
+    ax.set_xticks(x, [f"{i}. {n}".replace(" + ", "\n+ ").replace("по умолчанию", "по умолч.") for i, n in
+                      zip(a.index, a.step_name)], fontsize=7.4)
+    ax.set_ylabel("снижение MAE к «прошлому году», %")
+    ax.set_ylim(0, a.gain.max() * 1.22)
+    ax.grid(axis="x", visible=False)
+    ax.legend(loc="upper left", fontsize=7)
     return _save(fig, out)
 
 
@@ -459,27 +484,37 @@ def shap_top(out: Path) -> bool:
 
 
 def forecast_2026(out: Path) -> bool:
-    t = S._read_csv(S.TABLES / "forecast_2026_rf.csv")
-    if t is None:
+    p = S.MODEL / "final" / "forecast_by_date.parquet"
+    if not p.exists():
         return False
-    t = t[t.crop.isin(CROP_NAME.values())].copy()
-    t["k"] = t.crop.map(NAME_KEY)
-    t = t.set_index("k").reindex(CROP_ORDER).dropna(subset=["vs_trend_pct"])
-    fig, ax = plt.subplots(figsize=(W, 2.4))
+    f = pd.read_parquet(p)
+    f = f[(f.forecast_date == "final") & (f.source == "model_2026") & (f.area_kha > 0)]
+    code = {"1010400": "winter_wheat", "1010500": "spring_wheat", "1030100": "barley", "3080000": "sunflower",
+            "1080202": "maize", "3100000": "soy", "3060100": "sugar_beet"}
+    f = f.assign(k=f.crop_code.astype(str).map(code))
+    rows = []
+    for k, g in f.groupby("k"):
+        w = g.area_kha
+        tr = np.average(g.trend_t_ha, weights=w)
+        rows.append({"k": k, "tr": tr, **{c: np.average(g[c], weights=w) for c in ("p10", "p50", "p90")}})
+    t = pd.DataFrame(rows).set_index("k").reindex(CROP_ORDER).dropna()
+    rel = lambda c: 100 * (t[c] / t.tr - 1)  # noqa: E731
+    fig, ax = plt.subplots(figsize=(W, 2.6))
     y = np.arange(len(t))
-    col = [BLUE if v >= 0 else RED for v in t.vs_trend_pct]
-    ax.barh(y, t.vs_trend_pct, color=col, height=0.6)
-    for yi, (v, f, tr) in enumerate(zip(t.vs_trend_pct, t.forecast_2026, t.trend_2026)):
-        ax.text(v + (0.4 if v >= 0 else -0.4), yi, f"{f:.2f} т/га (тренд {tr:.2f})".replace(".", ","),
-                va="center", ha="left" if v >= 0 else "right", fontsize=7, color=INK2)
+    ax.hlines(y, rel("p10"), rel("p90"), color=SEQ[1], lw=7, label="80-процентный интервал (P10–P90)")
+    col = [BLUE if v >= 0 else RED for v in rel("p50")]
+    ax.scatter(rel("p50"), y, color=col, s=36, zorder=3, edgecolor="white", lw=1.2, label="медианный прогноз")
+    for yi, (v, a_, tr, hi) in enumerate(zip(rel("p50"), t.p50, t.tr, rel("p90"))):
+        ax.text(hi + 1.5, yi, f"{a_:.2f} т/га, тренд {tr:.2f}".replace(".", ","), va="center", fontsize=7,
+                color=INK2)
     ax.axvline(0, color=NEUTRAL, lw=0.8)
     ax.set_yticks(y, _crop_axis(t.index))
     ax.invert_yaxis()
-    ax.set_xlim(-25, 30)
+    ax.set_xlim(rel("p10").min() - 4, rel("p90").max() + 30)
     ax.grid(axis="y", visible=False)
-    ax.set_xlabel("прогноз 2026 к тренду, % (средневзвешенно по модельным регионам)")
+    ax.set_xlabel("прогноз 2026 к тренду, % (итоговые модели, конец сезона, среднее по субъектам с весом площади)")
+    ax.legend(loc="upper center", bbox_to_anchor=(0.5, 1.18), ncol=2, fontsize=7)
     return _save(fig, out)
-
 
 # ---------------------------------------------------------------- оптимизация
 
@@ -582,7 +617,7 @@ FIGS = {
     "pipeline": pipeline, "data_volume": data_volume, "coverage": coverage, "weather_corr": weather_corr,
     "first_model": first_model, "trend_target": trend_target, "feature_blocks": feature_blocks,
     "model_families": model_families, "leadtime": leadtime, "v1_v2": v1_v2, "ladder_end": ladder_end,
-    "ladder_dates": ladder_dates, "years": years, "pred_actual": pred_actual, "intervals": intervals,
+    "ladder_dates": ladder_dates, "ladder_macro": ladder_macro, "years": years, "pred_actual": pred_actual, "intervals": intervals,
     "shap_blocks": shap_blocks, "shap_top": shap_top, "forecast_2026": forecast_2026,
     "opt_delta": opt_delta, "opt_backtest": opt_backtest, "opt_sensitivity": opt_sensitivity,
 }

@@ -101,6 +101,27 @@ def compute_numbers() -> tuple[dict, dict]:
         N["ladder_gain_may"] = fnum(g[("05-01", top)])
         for s in range(1, top):
             N[f"ladder_step{s}_end"] = fnum(g[("end", s)])
+        late = S.ladder_macro()
+        late = late[late.period == "late"].set_index(["date", "step"]).gain
+        N["ladder_gain_end_late"] = fnum(late[("end", top)])
+        N["ladder_step2_end_late"] = fnum(late[("end", 2)])
+        lad = S.ladder()
+        e = lad[(lad.date == "end") & (lad.period == "all")].groupby("step").mae.mean()
+        for s_, v in e.items():
+            N[f"ladder_mae{int(s_)}"] = fnum(v, 2)
+        q = lad[(lad.date == "end") & (lad.period == "all") & (lad.step == top)]
+        N["ladder_gain_min"], N["ladder_gain_max"] = fnum(q.gain_vs_step0_pct.min()), fnum(q.gain_vs_step0_pct.max())
+
+    def final():
+        df = final_models()
+        F["final"] = df is not None
+        if df is None:
+            return
+        N["final_cov_min"], N["final_cov_max"] = fnum(df["cov"].min(), 2), fnum(df["cov"].max(), 2)
+        end = df[df.date == "Конец сезона"]
+        N["final_gain_end_min"], N["final_gain_end_max"] = fnum(end.gain.min()), fnum(end.gain.max())
+        N["final_n_ens"] = str(int(df.kind.str.startswith("ens").sum()))
+        N["final_n"] = str(len(df))
 
     def opt():
         F["opt"] = (S.TABLES / "optimization_backtest_summary.csv").exists()
@@ -137,9 +158,10 @@ def compute_numbers() -> tuple[dict, dict]:
             N["opt_bad_d10"] = fnum(b.loc["d10", "bad_years_profit_rub_ha"])
             N["opt_bt_bln_d10"] = fnum(b.loc["d10", "real_gain_bln_year"])
 
-    for fn in (data, sweep, ladder, opt):
+    for fn in (data, sweep, ladder, final, opt):
         block(fn)
-    F["sweep_v2_report"] = S.report_exists("sweep_v2.md")
+    F["sweep_v2_report"] = S.report_exists("sweep_v2.md") or (
+        S.report_exists("sweep.md") and "v2" in (S.REPORTS / "sweep.md").read_text(encoding="utf-8")[:200])
     F["opt_report"] = S.report_exists("optimization.md")
     return N, F
 
@@ -300,13 +322,50 @@ def t_ladder(N):
     if lad is None:
         return None
     q = lad[(lad.date == "end") & (lad.period == "all")]
-    g = q.pivot(index="crop", columns="step", values="mape").reindex(CROP_ORDER)
+    g = q.pivot(index="crop", columns="step", values="mae").reindex(CROP_ORDER)
     gain = q.pivot(index="crop", columns="step", values="gain_vs_step0_pct").reindex(CROP_ORDER)
     top = g.columns.max()
-    rows = [[CROP_NAME[k]] + [fnum(g.loc[k, s], 1) for s in g.columns] + [fnum(gain.loc[k, top], 1)] for k in g.index]
+    rows = [[CROP_NAME[k]] + [fnum(g.loc[k, s], 2 if k == "sugar_beet" else 3) for s in g.columns]
+            + [fnum(gain.loc[k, top], 1)] for k in g.index]
     names = q.drop_duplicates("step").set_index("step").step_name
-    return _t(["Культура"] + [f"{s}. {names[s]}" for s in g.columns] + ["Лучшая к наивной, % MAE"], rows,
-              align="l" + "r" * (len(g.columns) + 1))
+    return _t(["Культура"] + [f"{s}. {names[s]}" for s in g.columns] + ["Снижение MAE 4 к 0, %"], rows,
+              [3.0, 1.9, 1.9, 2.2, 2.4, 2.2, 2.0], align="l" + "r" * (len(g.columns) + 1),
+              note="MAE в т/га, скользящая проверка 2012–2025, одни и те же пары «субъект × год» для всех ступеней.")
+
+
+def final_models() -> pd.DataFrame | None:
+    """Таблица reports/final_models.md (культура × дата → тип, MAE, выигрыш, покрытие)."""
+    p = S.REPORTS / "final_models.md"
+    if not p.exists():
+        return None
+    rows = [[c.strip() for c in ln.strip().strip("|").split("|")] for ln in p.read_text(encoding="utf-8").splitlines()
+            if ln.startswith("|") and not ln.startswith("|---")]
+    df = pd.DataFrame(rows[1:], columns=rows[0])
+    df.columns = ["crop", "date", "kind", "members", "mae", "gain", "cov"]
+    for c in ("mae", "gain", "cov"):
+        df[c] = pd.to_numeric(df[c], errors="coerce")
+    return df
+
+
+def t_final(N):
+    df = final_models()
+    if df is None:
+        return None
+    dates = ["1 мая", "1 июня", "1 июля", "1 авг", "Конец сезона"]
+    kind = {"ridge": "Ridge", "lgbm": "LightGBM", "et": "ExtraTrees", "ens_mean2": "ансамбль 2",
+            "ens_mean3": "ансамбль 3", "ens_mean5": "ансамбль 5", "ens_stack": "стекинг"}
+    rows = []
+    for name in CROP_NAME.values():
+        q = df[df.crop == name].set_index("date")
+        if q.empty:
+            continue
+        cells = [f"{fnum(q.loc[d, 'gain'], 1)} · {fnum(q.loc[d, 'cov'], 2)}" if d in q.index else "—" for d in dates]
+        end = q.loc["Конец сезона"] if "Конец сезона" in q.index else None
+        rows.append([name] + cells + [kind.get(end.kind, end.kind) if end is not None else ""])
+    return _t(["Культура", "1 мая", "1 июня", "1 июля", "1 августа", "Конец сезона", "Модель конца сезона"], rows,
+              [3.0, 1.9, 1.9, 1.9, 1.9, 2.1, 2.4], align="lrrrrrl",
+              note="В ячейке: снижение MAE к лучшему простому прогнозу, % · доля фактов внутри 80-процентного интервала. "
+                   "Модель выбрана по годам 2012–2018 как самая простая в пределах 1 % от лучшей MAE.")
 
 
 def t_opt_costs(N):
@@ -343,7 +402,7 @@ def t_opt_backtest(N):
 
 
 TABLES = {"methods": t_methods, "sources": t_sources, "sample": t_sample, "clean": t_clean, "flags": t_flags,
-          "featsets": t_featsets, "stages": t_stages, "best_end": t_best_end, "ladder": t_ladder,
+          "featsets": t_featsets, "stages": t_stages, "best_end": t_best_end, "ladder": t_ladder, "final": t_final,
           "opt_costs": t_opt_costs, "opt_regions": t_opt_regions, "opt_backtest": t_opt_backtest}
 
 
