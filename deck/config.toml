@@ -1,8 +1,8 @@
 # Данные, которых нет в таблицах проекта: заполнить перед подачей. Пустое поле на слайде видно как [заполнить].
 author = "Соболев Даниил"
 role = "аспирант СПбПУ, специальность 5.2.2"
-email = ""
-telegram = ""
+email = "sobolevdan2002@gmail.com"
+telegram = "https://t.me/Parampayka"
 repo_url = "https://github.com/Parampaika/AgroCast"
 site_url = "https://parampaika.github.io/AgroCast/"
 date_label = "Октябрь 2026"
