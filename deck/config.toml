@@ -1,8 +1,8 @@
 # Данные, которых нет в таблицах проекта: заполнить перед подачей. Пустое поле на слайде видно как [заполнить].
-author = "Фамилия И.О."
+author = "Соболев Даниил"
 role = "аспирант СПбПУ, специальность 5.2.2"
 email = ""
 telegram = ""
-repo_url = ""        # ссылка на репозиторий GitHub
-site_url = ""        # адрес опубликованного сайта (если есть)
+repo_url = "https://github.com/Parampaika/AgroCast"
+site_url = "https://parampaika.github.io/AgroCast/"
 date_label = "Октябрь 2026"
