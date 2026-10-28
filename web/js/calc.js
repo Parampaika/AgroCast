@@ -85,7 +85,7 @@ export function renderCalc(el) {
     <div class="stack">
       <div class="kpis" id="cK" style="grid-template-columns:repeat(auto-fit,minmax(180px,1fr))"></div>
       <div class="card">
-        <div class="card-head"><div><h3>Прогноз по культурам</h3><div class="sub" id="cSub"></div></div>${demoBadge('прогноз и затраты — демо')}</div>
+        <div class="card-head"><div><h3>Прогноз по культурам</h3><div class="sub" id="cSub"></div></div>${realBadge('цены — ЕМИСС, затраты — допущения', 'Прогноз урожайности — итоговая модель; цены — ЕМИСС 57693; затраты на гектар — допущения по открытым обзорам отрасли, не норматив')}</div>
         <div class="table-wrap" id="cTbl"></div>
       </div>
       <div class="grid g-2">

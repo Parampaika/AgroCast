@@ -372,7 +372,7 @@ def build_economics(regions):
         out[c["crop_code"]] = {"product": c["product"], "cost_rub_ha": c["cost_rub_ha"],
                                "price_rf_rub_t": price.get("643", {}).get(c["product"])}
     region_prices = {ok: {c["crop_code"]: p.get(c["product"]) for c in CROPS} for ok, p in price.items() if ok != "643"}
-    dump("economics.json", {"meta": meta(True, "цены — ЕМИСС 57693 (январь–сентябрь 2026, руб./т, подстановка субъект → ФО → РФ); "
+    dump("economics.json", {"meta": meta(False, "цены — ЕМИСС 57693 (январь–сентябрь 2026, руб./т, подстановка субъект → ФО → РФ); "
                                                "затраты на 1 га и поправки — допущения",
                                          "Затраты — оценка полных затрат на гектар по открытым обзорам отрасли, не норматив."),
                             "assumption": True, "currency": "RUB", "crops": out, "region_prices": region_prices,
